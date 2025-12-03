@@ -1,6 +1,7 @@
 from typing import Dict, Any
 import numpy as np
 import pandas as pd
+
 import shap
 
 from ..core.model_loader import load_preprocessing_and_model
@@ -25,9 +26,8 @@ _SELECTED_FEATURES = list(_metrics.get("selected_features", _FEATURE_COLUMNS))
 
 print("DEBUG _SELECTED_FEATURES:", type(_SELECTED_FEATURES), len(_SELECTED_FEATURES))
 
-
 # ============================================================
-# INIT SHAP ONCE (TreeExplainer for RandomForest)
+# INIT SHAP EXPLAINER SAFELY (RandomForest → TreeExplainer)
 # ============================================================
 try:
     shap_explainer = shap.TreeExplainer(_model)
@@ -74,49 +74,50 @@ def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# MAIN PREDICTION FUNCTION + SHAP
+# MAIN PREDICTION FUNCTION
 # ============================================================
 def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
 
     # ------------------------
-    # 1. Convert input to DF
+    # 1. Convert input → DataFrame
     # ------------------------
     df = pd.DataFrame([payload.dict()])
 
     # 2. Feature engineering
     df = _engineer_features(df)
 
-    # 3. Ensure all expected columns exist
+    # 3. Ensure expected columns exist
     for col in _FEATURE_COLUMNS:
         if col not in df.columns:
             df[col] = 0
 
     df = df[_FEATURE_COLUMNS]
 
-    # 4. Encode categoricals
+    # 4. Label encode categoricals
     for col in _CATEGORICAL_COLUMNS:
         if col in df.columns and col in _label_encoders:
             le = _label_encoders[col]
             try:
                 df[col] = le.transform(df[col].astype(str))
-            except:
-                df[col] = 0  # fallback for unseen labels
+            except Exception:
+                df[col] = 0  # unseen category fallback
 
-    # 5. Scale numericals
+    # 5. Scale numeric columns
     df[_NUMERIC_COLUMNS] = _scaler.transform(df[_NUMERIC_COLUMNS])
 
-    # 6. Feature selection
+    # 6. Apply feature selection
     df = df[_SELECTED_FEATURES]
     df = df.astype(float)
 
-    # Copy for SHAP
+    # Copy raw row for SHAP index alignment
     X_input = df.values
 
     # ------------------------
-    # 7. Model prediction
+    # 7. Predict
     # ------------------------
     proba = _model.predict_proba(df)[0]
     pred_index = int(np.argmax(proba))
+
     predicted_subtype = _TARGET_NAMES[pred_index]
 
     probabilities = {
@@ -125,7 +126,7 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
     }
 
     # ============================================================
-    # 8. SHAP EXPLAINABILITY
+    # 8. SHAP COMPUTATION (SAFE)
     # ============================================================
     shap_data = None
 
@@ -133,35 +134,53 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
         try:
             shap_values = shap_explainer.shap_values(X_input)
 
-            # shap_values is a list → pick the predicted class
-            shap_for_pred = shap_values[pred_index][0]
+            # SHAP always returns a list for multiclass RF
+            if not isinstance(shap_values, list):
+                shap_values = [shap_values]
 
-            shap_data = {
-                "base_value": float(shap_explainer.expected_value[pred_index]),
-                "feature_values": {
-                    feature: float(X_input[0][i])
-                    for i, feature in enumerate(_SELECTED_FEATURES)
-                },
-                "shap_values": {
-                    feature: float(shap_for_pred[i])
-                    for i, feature in enumerate(_SELECTED_FEATURES)
-                },
-                "ranked_importance": sorted(
-                    [
-                        (feature, float(abs(shap_for_pred[i])))
+            num_classes = len(shap_values)
+
+            # Prevent out-of-bounds indexing
+            if pred_index >= num_classes:
+                print(
+                    f"⚠ SHAP mismatch: model predicted class index {pred_index}, "
+                    f"but SHAP returned {num_classes} class arrays."
+                )
+                shap_for_pred = None
+            else:
+                shap_for_pred = shap_values[pred_index][0]
+
+            if shap_for_pred is not None:
+                shap_data = {
+                    "base_value": float(
+                        shap_explainer.expected_value[pred_index]
+                        if isinstance(shap_explainer.expected_value, (list, np.ndarray))
+                        else shap_explainer.expected_value
+                    ),
+                    "feature_values": {
+                        feature: float(X_input[0][i])
                         for i, feature in enumerate(_SELECTED_FEATURES)
-                    ],
-                    key=lambda x: x[1],
-                    reverse=True,
-                ),
-            }
+                    },
+                    "shap_values": {
+                        feature: float(shap_for_pred[i])
+                        for i, feature in enumerate(_SELECTED_FEATURES)
+                    },
+                    "ranked_importance": sorted(
+                        [
+                            (feature, float(abs(shap_for_pred[i])))
+                            for i, feature in enumerate(_SELECTED_FEATURES)
+                        ],
+                        key=lambda x: x[1],
+                        reverse=True,
+                    ),
+                }
 
         except Exception as e:
             print("⚠ SHAP computation failed:", e)
             shap_data = None
 
     # ============================================================
-    # 9. Return everything
+    # 9. RETURN CLEAN API FORMAT
     # ============================================================
     return {
         "predicted_subtype": str(predicted_subtype),
