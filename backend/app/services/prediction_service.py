@@ -1,7 +1,6 @@
 from typing import Dict, Any
 import numpy as np
 import pandas as pd
-
 import shap
 
 from ..core.model_loader import load_preprocessing_and_model
@@ -26,15 +25,39 @@ _SELECTED_FEATURES = list(_metrics.get("selected_features", _FEATURE_COLUMNS))
 
 print("DEBUG _SELECTED_FEATURES:", type(_SELECTED_FEATURES), len(_SELECTED_FEATURES))
 
+
 # ============================================================
-# INIT SHAP EXPLAINER SAFELY (RandomForest → TreeExplainer)
+# SHAP INITIALIZATION (For RandomForest → TreeExplainer)
 # ============================================================
 try:
     shap_explainer = shap.TreeExplainer(_model)
     print("SHAP TreeExplainer initialized")
 except Exception as e:
-    print("⚠ SHAP initialization failed:", e)
+    print("⚠ SHAP init failed:", e)
     shap_explainer = None
+
+
+# ============================================================
+# SAFE SCALAR FLATTEN FUNCTION
+# ============================================================
+def flatten_scalar(value):
+    """
+    Convert ANY nested array/list/scalar into a pure Python float.
+    Handles cases like:
+       0.123
+       [0.123]
+       [[0.123]]
+       array(0.123)
+       array([0.123])
+       array([[0.123]])
+    """
+    try:
+        if isinstance(value, (list, tuple, np.ndarray)):
+            arr = np.array(value).reshape(-1)  # fully flatten
+            return float(arr[0])
+        return float(value)
+    except Exception:
+        return 0.0
 
 
 # ============================================================
@@ -74,7 +97,7 @@ def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# MAIN PREDICTION FUNCTION
+# MAIN PREDICTION + SHAP
 # ============================================================
 def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
 
@@ -86,30 +109,27 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
     # 2. Feature engineering
     df = _engineer_features(df)
 
-    # 3. Ensure expected columns exist
+    # 3. Ensure expected columns
     for col in _FEATURE_COLUMNS:
         if col not in df.columns:
             df[col] = 0
 
     df = df[_FEATURE_COLUMNS]
 
-    # 4. Label encode categoricals
+    # 4. Encode categoricals
     for col in _CATEGORICAL_COLUMNS:
         if col in df.columns and col in _label_encoders:
             le = _label_encoders[col]
             try:
                 df[col] = le.transform(df[col].astype(str))
-            except Exception:
-                df[col] = 0  # unseen category fallback
+            except:
+                df[col] = 0
 
-    # 5. Scale numeric columns
+    # 5. Scale
     df[_NUMERIC_COLUMNS] = _scaler.transform(df[_NUMERIC_COLUMNS])
 
-    # 6. Apply feature selection
-    df = df[_SELECTED_FEATURES]
-    df = df.astype(float)
-
-    # Copy raw row for SHAP index alignment
+    # 6. Select features
+    df = df[_SELECTED_FEATURES].astype(float)
     X_input = df.values
 
     # ------------------------
@@ -117,16 +137,14 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
     # ------------------------
     proba = _model.predict_proba(df)[0]
     pred_index = int(np.argmax(proba))
-
     predicted_subtype = _TARGET_NAMES[pred_index]
 
     probabilities = {
-        str(_TARGET_NAMES[i]): float(proba[i])
-        for i in range(len(proba))
+        _TARGET_NAMES[i]: float(proba[i]) for i in range(len(proba))
     }
 
     # ============================================================
-    # 8. SHAP COMPUTATION (SAFE)
+    # 8. SHAP — fully safe implementation
     # ============================================================
     shap_data = None
 
@@ -134,29 +152,30 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
         try:
             shap_values = shap_explainer.shap_values(X_input)
 
-            # SHAP always returns a list for multiclass RF
+            # Always treat as list
             if not isinstance(shap_values, list):
                 shap_values = [shap_values]
 
-            num_classes = len(shap_values)
-
-            # Prevent out-of-bounds indexing
-            if pred_index >= num_classes:
-                print(
-                    f"⚠ SHAP mismatch: model predicted class index {pred_index}, "
-                    f"but SHAP returned {num_classes} class arrays."
-                )
+            # Avoid index mismatch
+            if pred_index >= len(shap_values):
+                print("⚠ SHAP class mismatch")
                 shap_for_pred = None
             else:
-                shap_for_pred = shap_values[pred_index][0]
+                # flatten SHAP vector to 1D
+                shap_for_pred = np.array(shap_values[pred_index][0]).reshape(-1)
 
+            # SAFE expected_value extraction
+            raw_exp = shap_explainer.expected_value
+
+            if isinstance(raw_exp, (list, np.ndarray)):
+                base_value = flatten_scalar(raw_exp[pred_index])
+            else:
+                base_value = flatten_scalar(raw_exp)
+
+            # Build SHAP dictionary only if valid
             if shap_for_pred is not None:
                 shap_data = {
-                    "base_value": float(
-                        shap_explainer.expected_value[pred_index]
-                        if isinstance(shap_explainer.expected_value, (list, np.ndarray))
-                        else shap_explainer.expected_value
-                    ),
+                    "base_value": base_value,
                     "feature_values": {
                         feature: float(X_input[0][i])
                         for i, feature in enumerate(_SELECTED_FEATURES)
@@ -167,7 +186,7 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
                     },
                     "ranked_importance": sorted(
                         [
-                            (feature, float(abs(shap_for_pred[i])))
+                            (feature, abs(float(shap_for_pred[i])))
                             for i, feature in enumerate(_SELECTED_FEATURES)
                         ],
                         key=lambda x: x[1],
@@ -180,10 +199,10 @@ def predict_subtype(payload: GBSPredictionInput) -> Dict[str, Any]:
             shap_data = None
 
     # ============================================================
-    # 9. RETURN CLEAN API FORMAT
+    # RETURN RESPONSE
     # ============================================================
     return {
-        "predicted_subtype": str(predicted_subtype),
+        "predicted_subtype": predicted_subtype,
         "confidence": float(np.max(proba)),
         "probabilities": probabilities,
         "features_used": [str(f) for f in _SELECTED_FEATURES],
