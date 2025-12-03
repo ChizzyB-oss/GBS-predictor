@@ -20,3 +20,4 @@ passlib[bcrypt]
 python-multipart
 email-validator
 argon2-cffi
+shap
