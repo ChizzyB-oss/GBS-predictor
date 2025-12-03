@@ -1,0 +1,48 @@
+{
+  "model_name": "RandomForestClassifier",
+  "best_params": {
+    "rf__class_weight": "balanced",
+    "rf__max_depth": 10,
+    "rf__min_samples_split": 5,
+    "rf__n_estimators": 200,
+    "select__k": 25
+  },
+  "accuracy": 0.8375,
+  "f1_weighted": 0.8224143349875057,
+  "cv_mean_f1_weighted": 0.8783297138864951,
+  "cv_std_f1_weighted": 0.004945535845324529,
+  "selected_features": [
+    "age",
+    "gender",
+    "paralysis",
+    "sensory_loss",
+    "reflex_loss",
+    "respiratory_involvement",
+    "cranial_nerve_involvement",
+    "autonomic_dysfunction",
+    "progression_days",
+    "csf_protein",
+    "csf_cell_count",
+    "motor_velocity",
+    "sensory_velocity",
+    "amplitude",
+    "f_wave_latency",
+    "conduction_block",
+    "previous_infection",
+    "recent_vaccination",
+    "hospital_stay_days",
+    "mechanical_ventilation",
+    "treatment_response",
+    "age_group",
+    "symptom_severity",
+    "velocity_ratio",
+    "csf_category"
+  ],
+  "target_names": [
+    "AIDP",
+    "AMAN",
+    "AMSAN",
+    "MF"
+  ],
+  "calibrated": false
+}
