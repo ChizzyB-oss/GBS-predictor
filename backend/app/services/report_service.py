@@ -1,120 +1,72 @@
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
-import json
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
 
 
-def generate_prediction_pdf(prediction_obj, shap_data=None):
+def generate_prediction_pdf(prediction, shap=None) -> bytes:
     """
-    Generates a PDF clinical-style report for a prediction.
-    Returns an in-memory BytesIO file.
+    Generates a PDF report for a prediction row (dictionary form).
+    Returns the PDF bytes.
     """
 
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
 
-    # -------------------------------------------------------------
-    # PDF HEADER
-    # -------------------------------------------------------------
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(50, 800, "GBS Subtype Prediction Report")
+    elements = []
 
-    c.setFont("Helvetica", 10)
-    c.drawString(50, 785, f"Prediction ID: {prediction_obj.id}")
-    c.drawString(50, 770, f"Date: {prediction_obj.created_at}")
+    # Title
+    elements.append(Paragraph("<b>GBS Subtype Prediction Report</b>", styles["Title"]))
+    elements.append(Spacer(1, 12))
 
-    c.line(50, 760, 550, 760)
+    # Subtype
+    elements.append(Paragraph(f"<b>Predicted Subtype:</b> {prediction['predicted_subtype']}", styles["Heading2"]))
+    elements.append(Paragraph(f"<b>Confidence:</b> {(prediction['confidence']*100):.1f}%", styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
-    # -------------------------------------------------------------
-    # SECTION 1 — USER INPUT SUMMARY
-    # -------------------------------------------------------------
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 740, "1. Patient Input Data")
+    # Probabilities table
+    prob_data = [["Subtype", "Probability (%)"]]
+    for subtype, value in prediction["probabilities"].items():
+        prob_data.append([subtype, f"{value*100:.1f}%"])
 
-    c.setFont("Helvetica", 10)
-    y = 720
+    prob_table = Table(prob_data)
+    prob_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (1, 1), (-1, -1), "CENTER")
+    ]))
 
-    try:
-        input_data = json.loads(prediction_obj.input_data)
-    except:
-        input_data = {}
+    elements.append(Paragraph("<b>Probability Distribution</b>", styles["Heading3"]))
+    elements.append(prob_table)
+    elements.append(Spacer(1, 18))
 
-    for key, val in input_data.items():
-        c.drawString(60, y, f"{key}: {val}")
-        y -= 14
-        if y < 60:
-            c.showPage()
-            y = 800
+    # SHAP section
+    if shap:
+        elements.append(Paragraph("<b>Top SHAP Feature Importance</b>", styles["Heading3"]))
 
-    # -------------------------------------------------------------
-    # SECTION 2 — PREDICTION OUTPUT
-    # -------------------------------------------------------------
-    c.setFont("Helvetica-Bold", 14)
-    y -= 20
-    c.drawString(50, y, "2. Model Output")
+        shap_data = [["Feature", "Impact"]]
+        for feature, impact in shap.get("ranked_importance", [])[:8]:
+            shap_data.append([feature, f"{impact:.4f}"])
 
-    c.setFont("Helvetica", 10)
-    y -= 20
-    c.drawString(60, y, f"Predicted Subtype: {prediction_obj.predicted_subtype}")
-    y -= 14
-    c.drawString(60, y, f"Confidence: {round(prediction_obj.confidence * 100, 2)}%")
+        shap_table = Table(shap_data)
+        shap_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
 
-    # Probabilities
-    y -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(60, y, "Subtype Probabilities:")
-
-    c.setFont("Helvetica", 10)
-    y -= 18
-
-    try:
-        probs = json.loads(prediction_obj.probabilities)
-    except:
-        probs = {}
-
-    for subtype, prob in probs.items():
-        c.drawString(70, y, f"{subtype}: {round(prob * 100, 2)}%")
-        y -= 14
-
-    # -------------------------------------------------------------
-    # SECTION 3 — SHAP EXPLAINABILITY
-    # -------------------------------------------------------------
-    if shap_data:
-        y -= 20
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(50, y, "3. Model Explainability (SHAP)")
-
-        y -= 20
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(60, y, "Most important features:")
-
-        y -= 18
-        c.setFont("Helvetica", 10)
-
-        ranked = shap_data.get("ranked_importance", [])
-        for feature, value in ranked[:10]:  # top 10 features
-            c.drawString(70, y, f"{feature}: {round(value, 4)}")
-            y -= 14
-            if y < 60:
-                c.showPage()
-                y = 800
-
+        elements.append(shap_table)
+        elements.append(Spacer(1, 18))
     else:
-        y -= 20
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(50, y, "3. SHAP Explainability")
-        y -= 20
-        c.setFont("Helvetica", 10)
-        c.drawString(60, y, "SHAP data unavailable for this prediction.")
+        elements.append(Paragraph("<i>SHAP explainability was not available.</i>", styles["Normal"]))
+        elements.append(Spacer(1, 18))
 
-    # -------------------------------------------------------------
-    # FOOTER
-    # -------------------------------------------------------------
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(50, 40, "Generated automatically by the GBS Clinical Decision Support System.")
-    c.drawString(50, 28, "This report is for research and prototyping only — not for clinical use.")
+    # End text
+    elements.append(Paragraph(
+        "This report was automatically generated by the GBS Subtype Decision Support System.",
+        styles["Italic"]
+    ))
 
-    c.save()
-    buffer.seek(0)
-    return buffer
+    doc.build(elements)
+    return buffer.getvalue()
