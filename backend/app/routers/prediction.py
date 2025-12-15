@@ -143,7 +143,7 @@ def download_prediction_report(
     # 3. Generate PDF
     # -----------------------------
     try:
-        pdf_bytes = generate_prediction_pdf(pred_dict, shap_data)
+        pdf_bytes = generate_prediction_pdf(pred_dict, shap_data, clinical_inputs=input_data,)
     except Exception as e:
         print("❌ PDF generation failed:", repr(e))
         raise HTTPException(500, f"PDF generation failed: {str(e)}")
