@@ -95,26 +95,53 @@ def download_prediction_report(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_user),
 ):
-    """Generate a PDF report for a saved prediction."""
+    """Generate a PDF report with full SHAP explainability."""
 
     pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
     if not pred:
         raise HTTPException(404, "Prediction not found")
 
-    # Only allow owner or admin to download
+    # Only allow owner or admin
     if current_user.role != "admin" and pred.user_id != current_user.id:
         raise HTTPException(403, "Not allowed to access this report")
 
-    # Rebuild dictionary for PDF generator
+    # -----------------------------
+    # 1. Load original input
+    # -----------------------------
+    try:
+        input_data = json.loads(pred.input_data)
+    except:
+        raise HTTPException(500, "Failed to load stored input data")
+
+    # Convert back to schema for prediction
+    payload = GBSPredictionInput(**input_data)
+
+    # -----------------------------
+    # 2. Re-run prediction to retrieve SHAP
+    # -----------------------------
+    try:
+        result = predict_subtype(payload)
+    except Exception as e:
+        print("❌ Failed to recompute prediction/SHAP:", repr(e))
+        raise HTTPException(500, f"SHAP recomputation failed: {str(e)}")
+
+    # result contains:
+    # - predicted_subtype
+    # - confidence
+    # - probabilities
+    # - shap  <-- this is what PDF needs
+
     pred_dict = {
-        "predicted_subtype": pred.predicted_subtype,
-        "confidence": pred.confidence,
-        "probabilities": json.loads(pred.probabilities),
+        "predicted_subtype": result["predicted_subtype"],
+        "confidence": result["confidence"],
+        "probabilities": result["probabilities"],
     }
 
-    # SHAP not persisted yet, set None
-    shap_data = None
+    shap_data = result.get("shap")
 
+    # -----------------------------
+    # 3. Generate PDF
+    # -----------------------------
     try:
         pdf_bytes = generate_prediction_pdf(pred_dict, shap_data)
     except Exception as e:
@@ -128,3 +155,4 @@ def download_prediction_report(
             "Content-Disposition": f"attachment; filename=prediction_{prediction_id}.pdf"
         }
     )
+
