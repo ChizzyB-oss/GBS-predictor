@@ -22,3 +22,6 @@ email-validator
 argon2-cffi
 shap
 reportlab
+pyotp
+qrcode[pil]
+python-multipart
