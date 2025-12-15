@@ -2,8 +2,7 @@ from io import BytesIO
 from typing import Dict, Any, Optional
 
 import matplotlib
-# Use a non-GUI backend so this works in FastAPI / servers
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # ensure backend is compatible with FastAPI
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -26,27 +25,21 @@ from reportlab.lib.styles import getSampleStyleSheet
 # ============================================================
 
 def generate_probability_chart(probabilities: Dict[str, float]) -> Optional[BytesIO]:
-    """
-    Generate a bar chart PNG for probability distribution.
-    Returns a BytesIO buffer or None if no probabilities.
-    """
+    """Generate a bar chart for prediction probabilities."""
     if not probabilities:
         return None
 
     labels = list(probabilities.keys())
-    values = [v * 100 for v in probabilities.values()]
+    values = [v * 100 for v in probabilities.values()]  # convert to %
 
     fig, ax = plt.subplots(figsize=(6, 3))
-
     ax.bar(labels, values)
     ax.set_ylabel("Probability (%)")
     ax.set_title("Subtype Probability Distribution")
-
     plt.tight_layout()
 
     buf = BytesIO()
-    canvas = FigureCanvas(fig)
-    canvas.print_png(buf)
+    FigureCanvas(fig).print_png(buf)
     plt.close(fig)
 
     buf.seek(0)
@@ -54,11 +47,7 @@ def generate_probability_chart(probabilities: Dict[str, float]) -> Optional[Byte
 
 
 def generate_shap_chart(shap_data: Dict[str, Any]) -> Optional[BytesIO]:
-    """
-    Generate SHAP feature-importance horizontal bar chart.
-    Expects shap_data['ranked_importance'] = [(feature, impact), ...].
-    Returns BytesIO buffer or None if no SHAP info.
-    """
+    """Generate SHAP feature-importance plot."""
     if not shap_data:
         return None
 
@@ -66,23 +55,20 @@ def generate_shap_chart(shap_data: Dict[str, Any]) -> Optional[BytesIO]:
     if not ranked:
         return None
 
-    # Show top 8 features
-    top = ranked[:8]
-
-    features = [f for f, _ in top]
+    top = ranked[:8]  # top 8 features
+    features = [f.replace("_", " ") for f, _ in top]
     impacts = [v for _, v in top]
 
     fig, ax = plt.subplots(figsize=(6, 3))
     ax.barh(features, impacts, color="purple")
     ax.set_title("Top SHAP Feature Contributions")
-    ax.set_xlabel("SHAP impact (absolute value)")
-    ax.invert_yaxis()  # highest at top
+    ax.set_xlabel("SHAP Impact (Absolute Value)")
+    ax.invert_yaxis()
 
     plt.tight_layout()
 
     buf = BytesIO()
-    canvas = FigureCanvas(fig)
-    canvas.print_png(buf)
+    FigureCanvas(fig).print_png(buf)
     plt.close(fig)
 
     buf.seek(0)
@@ -90,7 +76,7 @@ def generate_shap_chart(shap_data: Dict[str, Any]) -> Optional[BytesIO]:
 
 
 # ============================================================
-# MAIN PDF GENERATION SERVICE
+# MAIN PDF GENERATOR
 # ============================================================
 
 def generate_prediction_pdf(
@@ -98,12 +84,12 @@ def generate_prediction_pdf(
     shap: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     """
-    Generates a PDF with:
-    • Prediction summary
-    • Probability table
-    • Probability bar chart
-    • SHAP table and chart (if available)
+    Build a complete PDF report containing:
+    - Prediction results
+    - Probability table + bar chart
+    - SHAP table + SHAP bar chart (if SHAP available)
     """
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -117,7 +103,7 @@ def generate_prediction_pdf(
     story.append(Spacer(1, 20))
 
     # --------------------------------------------------------
-    # PREDICTION SUMMARY
+    # SUMMARY
     # --------------------------------------------------------
     story.append(
         Paragraph(
@@ -134,14 +120,14 @@ def generate_prediction_pdf(
     story.append(Spacer(1, 16))
 
     # --------------------------------------------------------
-    # PROBABILITY TABLE
+    # PROBABILITIES TABLE
     # --------------------------------------------------------
     prob_data = [["Subtype", "Probability (%)"]]
     for subtype, value in prediction["probabilities"].items():
         prob_data.append([subtype, f"{value * 100:.1f}%"])
 
-    prob_table = Table(prob_data)
-    prob_table.setStyle(
+    table = Table(prob_data)
+    table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
@@ -152,14 +138,14 @@ def generate_prediction_pdf(
     )
 
     story.append(Paragraph("<b>Probability Distribution</b>", styles["Heading3"]))
-    story.append(prob_table)
+    story.append(table)
     story.append(Spacer(1, 20))
 
     # --------------------------------------------------------
     # PROBABILITY BAR CHART
     # --------------------------------------------------------
     prob_chart = generate_probability_chart(prediction["probabilities"])
-    if prob_chart is not None:
+    if prob_chart:
         story.append(Image(prob_chart, width=400, height=200))
         story.append(Spacer(1, 20))
 
@@ -172,7 +158,7 @@ def generate_prediction_pdf(
         # SHAP Table
         shap_rows = [["Feature", "Impact"]]
         for feature, impact in shap.get("ranked_importance", [])[:8]:
-            shap_rows.append([feature, f"{impact:.4f}"])
+            shap_rows.append([feature.replace("_", " "), f"{impact:.4f}"])
 
         shap_table = Table(shap_rows)
         shap_table.setStyle(
@@ -187,20 +173,29 @@ def generate_prediction_pdf(
         story.append(shap_table)
         story.append(Spacer(1, 20))
 
-        # SHAP Bar Chart
+        # SHAP Chart
         shap_chart = generate_shap_chart(shap)
-        if shap_chart is not None:
+        if shap_chart:
             story.append(Image(shap_chart, width=400, height=200))
         else:
             story.append(
-                Paragraph("<i>SHAP visualisation unavailable.</i>", styles["Normal"])
+                Paragraph("<i>SHAP chart could not be generated.</i>", styles["Normal"])
             )
-    else:
+
+        # Clinical interpretation
+        story.append(Spacer(1, 16))
         story.append(
             Paragraph(
-                "<i>SHAP explainability data was not available.</i>",
-                styles["Normal"],
+                "<i>SHAP values quantify how each clinical feature influenced the model’s decision. "
+                "Positive values increase the likelihood of the predicted subtype, while negative "
+                "values decrease it.</i>",
+                styles["BodyText"],
             )
+        )
+
+    else:
+        story.append(
+            Paragraph("<i>SHAP explainability data was not available.</i>", styles["Normal"])
         )
 
     story.append(Spacer(1, 20))
@@ -210,13 +205,13 @@ def generate_prediction_pdf(
     # --------------------------------------------------------
     story.append(
         Paragraph(
-            "This report was automatically generated by the GBS Subtype Decision Support System.",
+            "<i>This report was automatically generated by the GBS Subtype Decision Support System.</i>",
             styles["Italic"],
         )
     )
 
     # --------------------------------------------------------
-    # BUILD PDF
+    # BUILD
     # --------------------------------------------------------
     doc.build(story)
 

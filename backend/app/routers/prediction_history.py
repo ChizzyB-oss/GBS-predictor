@@ -40,10 +40,10 @@ def get_my_prediction_history(
 
         result.append({
             "id": r.id,
-            "input_data": input_data,                 # FIXED — now returns an object!
+            "input_data": input_data,                
             "predicted_subtype": r.predicted_subtype,
             "confidence": r.confidence,
-            "probabilities": probabilities,           # FIXED — parsed JSON
+            "probabilities": probabilities,        
             "created_at": r.created_at,
         })
 

@@ -32,9 +32,9 @@ def predict_gbs_subtype(
         # ---------------------------------------------------------
         # 1) Pydantic v1/v2 compatible extraction
         # ---------------------------------------------------------
-        if hasattr(payload, "model_dump"):   # Pydantic v2
+        if hasattr(payload, "model_dump"): 
             payload_data = payload.model_dump()
-        else:                                # Pydantic v1
+        else:                               
             payload_data = payload.dict()
 
         # ---------------------------------------------------------
