@@ -24,5 +24,8 @@ class User(Base):
     hospital = Column(String(255), nullable=True)
     specialty = Column(String(255), nullable=True)
 
+    mfa_secret = Column(String, nullable=True)  # TOTP secret
+    mfa_enabled = Column(Boolean, default=False)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

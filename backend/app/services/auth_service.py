@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Optional
+from io import BytesIO
 
+import pyotp
+import qrcode
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -12,7 +15,7 @@ from ..models.user_model import User
 
 
 # ======================================================
-# SETTINGS
+# JWT SETTINGS
 # ======================================================
 
 SECRET_KEY = "supersecret-key-change-this"
@@ -24,12 +27,11 @@ pwd_context = CryptContext(
     deprecated="auto"
 )
 
-# OAuth2 for extracting token from Authorization header
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/auth/login")
 
 
 # ======================================================
-# PASSWORD UTILS
+# PASSWORD HANDLERS
 # ======================================================
 
 def hash_password(password: str) -> str:
@@ -41,10 +43,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # ======================================================
-# CREATE JWT TOKEN
+# JWT TOKEN CREATION
 # ======================================================
 
-def create_user_token(user: User):
+def create_access_token(user: User) -> str:
     payload = {
         "sub": str(user.id),
         "role": user.role,
@@ -55,7 +57,7 @@ def create_user_token(user: User):
 
 
 # ======================================================
-# LOOK UP USER
+# USER LOOKUP
 # ======================================================
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -63,11 +65,11 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 
 
 # ======================================================
-# REGISTER USER (clinician or admin)
+# REGISTER USER
 # ======================================================
 
 def create_user(db: Session, user_in):
-    # check existing
+    # Prevent duplicate email
     if get_user_by_email(db, user_in.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -76,8 +78,10 @@ def create_user(db: Session, user_in):
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
-        role=user_in.role,  # admin or clinician
+        role=user_in.role,
         hashed_password=hashed_pw,
+        mfa_enabled=False,
+        mfa_secret=None,
     )
 
     db.add(user)
@@ -88,7 +92,7 @@ def create_user(db: Session, user_in):
 
 
 # ======================================================
-# LOGIN AUTH
+# BASIC LOGIN AUTH (no MFA)
 # ======================================================
 
 def authenticate_user(db: Session, email: str, password: str):
@@ -103,14 +107,49 @@ def authenticate_user(db: Session, email: str, password: str):
 
 
 # ======================================================
-# GET CURRENT USER (for login-required endpoints)
+# MFA UTILITIES
+# ======================================================
+
+def generate_mfa_secret() -> str:
+    """Generate a new TOTP secret."""
+    return pyotp.random_base32()
+
+
+def generate_mfa_qr(email: str, secret: str) -> bytes:
+    """Generate QR code PNG for authenticator apps."""
+    uri = pyotp.TOTP(secret).provisioning_uri(
+        name=email,
+        issuer_name="GBS Decision Support System",
+    )
+
+    qr = qrcode.QRCode(box_size=8, border=4)
+    qr.add_data(uri)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return buf.getvalue()
+
+
+def verify_mfa_token(secret: str, token: str) -> bool:
+    """Verify a 6-digit TOTP code."""
+    totp = pyotp.TOTP(secret)
+    return totp.verify(token, valid_window=1)  # allow slight clock drift
+
+
+# ======================================================
+# CURRENT USER CHECK
 # ======================================================
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    credentials_error = HTTPException(
+    error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
     )
@@ -118,23 +157,20 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
-
         if user_id is None:
-            raise credentials_error
-
+            raise error
     except JWTError:
-        raise credentials_error
+        raise error
 
     user = db.query(User).filter(User.id == int(user_id)).first()
-
     if not user:
-        raise credentials_error
+        raise error
 
     return user
 
 
 # ======================================================
-# REQUIRE ADMIN
+# REQUIRE ADMIN ROLE
 # ======================================================
 
 def require_admin(current_user: User = Depends(get_current_user)):

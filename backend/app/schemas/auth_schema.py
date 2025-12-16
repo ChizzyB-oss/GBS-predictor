@@ -33,3 +33,12 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class MfaLoginRequest(BaseModel):
+    email: str
+    password: str
+    otp: str
+
+
+class MfaConfirmRequest(BaseModel):
+    otp: str
