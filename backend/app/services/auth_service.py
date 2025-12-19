@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 from io import BytesIO
 
 import pyotp
@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from ..core.database import get_db
 from ..models.user_model import User
 
-
 # ======================================================
 # JWT SETTINGS
 # ======================================================
@@ -22,12 +21,11 @@ SECRET_KEY = "supersecret-key-change-this"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
-pwd_context = CryptContext(
-    schemes=["argon2"],
-    deprecated="auto"
-)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/auth/login")
+# IMPORTANT: this MUST match your actual login endpoint
+# Your swagger shows /api/auth/login
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 # ======================================================
@@ -43,17 +41,28 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 # ======================================================
-# JWT TOKEN CREATION
+# JWT TOKEN CREATION + DECODE
 # ======================================================
 
-def create_access_token(user: User) -> str:
+def create_access_token(user: User, mfa_pending: bool = False) -> str:
     payload = {
         "sub": str(user.id),
         "role": user.role,
+        "mfa_pending": mfa_pending,  # 🔥 key for MFA flow
         "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "iat": datetime.utcnow(),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str) -> Dict[str, Any]:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
 
 
 # ======================================================
@@ -69,40 +78,33 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
 # ======================================================
 
 def create_user(db: Session, user_in):
-    # Prevent duplicate email
     if get_user_by_email(db, user_in.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-
-    hashed_pw = hash_password(user_in.password)
 
     user = User(
         email=user_in.email,
         full_name=user_in.full_name,
         role=user_in.role,
-        hashed_password=hashed_pw,
+        hashed_password=hash_password(user_in.password),
         mfa_enabled=False,
         mfa_secret=None,
     )
-
     db.add(user)
     db.commit()
     db.refresh(user)
-
     return user
 
 
 # ======================================================
-# BASIC LOGIN AUTH (no MFA)
+# BASIC LOGIN AUTH
 # ======================================================
 
-def authenticate_user(db: Session, email: str, password: str):
+def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     user = get_user_by_email(db, email)
     if not user:
         return None
-
     if not verify_password(password, user.hashed_password):
         return None
-
     return user
 
 
@@ -111,12 +113,10 @@ def authenticate_user(db: Session, email: str, password: str):
 # ======================================================
 
 def generate_mfa_secret() -> str:
-    """Generate a new TOTP secret."""
     return pyotp.random_base32()
 
 
 def generate_mfa_qr(email: str, secret: str) -> bytes:
-    """Generate QR code PNG for authenticator apps."""
     uri = pyotp.TOTP(secret).provisioning_uri(
         name=email,
         issuer_name="GBS Decision Support System",
@@ -131,46 +131,45 @@ def generate_mfa_qr(email: str, secret: str) -> bytes:
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-
     return buf.getvalue()
 
 
 def verify_mfa_token(secret: str, token: str) -> bool:
-    """Verify a 6-digit TOTP code."""
+    if not secret:
+        return False
     totp = pyotp.TOTP(secret)
-    return totp.verify(token, valid_window=1)  # allow slight clock drift
+    return totp.verify(token, valid_window=1)
 
 
 # ======================================================
-# CURRENT USER CHECK
+# CURRENT USER (BLOCKS MFA-PENDING TOKENS)
 # ======================================================
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    error = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token",
-    )
+    payload = decode_token(token)
 
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise error
-    except JWTError:
-        raise error
+    user_id = payload.get("sub")
+    mfa_pending = payload.get("mfa_pending", False)
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # 🔥 critical: temp tokens cannot access protected endpoints
+    if mfa_pending:
+        raise HTTPException(status_code=401, detail="MFA verification required")
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
-        raise error
+        raise HTTPException(status_code=401, detail="User not found")
 
     return user
 
 
 # ======================================================
-# REQUIRE ADMIN ROLE
+# REQUIRE ADMIN
 # ======================================================
 
 def require_admin(current_user: User = Depends(get_current_user)):

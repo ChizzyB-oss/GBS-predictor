@@ -1,19 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
 from ..schemas.auth_schema import (
     UserCreate,
     UserLogin,
-    Token,
     UserResponse,
-    MfaLoginRequest,
+    LoginResponse,
+    MFAVerifyRequest,
     MfaConfirmRequest,
 )
 from ..services.auth_service import (
     create_user,
     authenticate_user,
     create_access_token,
+    decode_token,
     get_current_user,
     require_admin,
     generate_mfa_secret,
@@ -22,12 +23,11 @@ from ..services.auth_service import (
 )
 from ..models.user_model import User
 
-
 router = APIRouter(tags=["Auth"])
 
 
 # ============================================================
-# CLINICIAN REGISTRATION
+# REGISTER CLINICIAN
 # ============================================================
 @router.post("/register", response_model=UserResponse)
 def register_clinician(user_in: UserCreate, db: Session = Depends(get_db)):
@@ -36,98 +36,89 @@ def register_clinician(user_in: UserCreate, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# ADMIN REGISTRATION
+# REGISTER ADMIN (ADMIN ONLY)
 # ============================================================
 @router.post("/register-admin", response_model=UserResponse)
 def register_admin(
     user_in: UserCreate,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin),
+    _: User = Depends(require_admin),
 ):
     user_in.role = "admin"
     return create_user(db, user_in)
 
 
 # ============================================================
-# LOGIN (Clinician)
+# LOGIN — CLINICIAN
 # ============================================================
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=LoginResponse)
 def login_clinician(data: UserLogin, db: Session = Depends(get_db)):
     user = authenticate_user(db, data.email, data.password)
-
     if not user:
-        raise HTTPException(401, "Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Requires MFA
+    # MFA enabled → return temp_token (mfa_pending=True)
     if user.mfa_enabled:
-        return {
-            "access_token": None,
-            "requires_mfa": True,
-            "temp_token": create_access_token(user),
-            "token_type": "bearer",
-        }
+        temp_token = create_access_token(user, mfa_pending=True)
+        return LoginResponse(mfa_required=True, temp_token=temp_token, role=user.role)
 
-    token = create_access_token(user)
-
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token(user, mfa_pending=False)
+    return LoginResponse(access_token=token, token_type="bearer", mfa_required=False, role=user.role)
 
 
 # ============================================================
-# LOGIN (Admin)
+# LOGIN — ADMIN
 # ============================================================
-@router.post("/login-admin", response_model=Token)
+@router.post("/login-admin", response_model=LoginResponse)
 def login_admin(data: UserLogin, db: Session = Depends(get_db)):
     user = authenticate_user(db, data.email, data.password)
-
     if not user:
-        raise HTTPException(401, "Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if user.role != "admin":
-        raise HTTPException(403, "Admin access required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     if user.mfa_enabled:
-        return {
-            "access_token": None,
-            "requires_mfa": True,
-            "temp_token": create_access_token(user),
-            "token_type": "bearer",
-        }
+      temp_token = create_access_token(user, mfa_pending=True)
+      return LoginResponse(
+        mfa_required=True,
+        temp_token=temp_token,
+        role=user.role
+    )
 
-    token = create_access_token(user)
-    return {"access_token": token, "token_type": "bearer"}
+
+    token = create_access_token(user, mfa_pending=False)
+    return LoginResponse(access_token=token, token_type="bearer", mfa_required=False, role=user.role)
 
 
 # ============================================================
-# MFA LOGIN — FIXED (uses proper schema)
+# VERIFY MFA — ISSUE FINAL TOKEN
 # ============================================================
-@router.post("/login-mfa", response_model=Token)
-def login_with_mfa(payload: MfaLoginRequest, db: Session = Depends(get_db)):
-    """
-    MFA login flow:
-    - temp_token (from login)
-    - otp (from authenticator app)
-    """
-    # Extract user from temp token
-    try:
-        user = authenticate_user(db, payload.email, payload.password)
-    except:
-        raise HTTPException(401, "Invalid credentials")
+@router.post("/verify-mfa", response_model=LoginResponse)
+def verify_mfa_login(payload: MFAVerifyRequest, db: Session = Depends(get_db)):
+    # Decode temp token
+    temp_payload = decode_token(payload.temp_token)
 
+    if temp_payload.get("mfa_pending") is not True:
+        raise HTTPException(status_code=400, detail="Invalid MFA session")
+
+    user_id = temp_payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid MFA session")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
     if not user or not user.mfa_enabled:
-        raise HTTPException(400, "MFA is not enabled for this account")
+        raise HTTPException(status_code=400, detail="MFA not enabled for this account")
 
-    # Validate OTP
     if not verify_mfa_token(user.mfa_secret, payload.otp):
-        raise HTTPException(400, "Invalid MFA code")
+        raise HTTPException(status_code=400, detail="Invalid MFA code")
 
-    # Issue final JWT
-    token = create_access_token(user)
-
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token(user, mfa_pending=False)
+    return LoginResponse(access_token=token, token_type="bearer", mfa_required=False, role=user.role)
 
 
 # ============================================================
-# ENABLE MFA → Generate secret + QR code
+# ENABLE MFA — RETURN QR PNG
 # ============================================================
 @router.post("/enable-mfa")
 def enable_mfa(
@@ -135,19 +126,18 @@ def enable_mfa(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.mfa_enabled:
-        raise HTTPException(400, "MFA already enabled")
+        raise HTTPException(status_code=400, detail="MFA already enabled")
 
     secret = generate_mfa_secret()
     current_user.mfa_secret = secret
     db.commit()
 
     qr_png = generate_mfa_qr(current_user.email, secret)
-
     return Response(content=qr_png, media_type="image/png")
 
 
 # ============================================================
-# CONFIRM MFA ENABLE
+# CONFIRM MFA — JSON BODY
 # ============================================================
 @router.post("/confirm-mfa")
 def confirm_mfa(
@@ -156,14 +146,13 @@ def confirm_mfa(
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.mfa_secret:
-        raise HTTPException(400, "MFA setup has not started")
+        raise HTTPException(status_code=400, detail="MFA setup not initiated")
 
     if not verify_mfa_token(current_user.mfa_secret, payload.otp):
-        raise HTTPException(400, "Invalid MFA code")
+        raise HTTPException(status_code=400, detail="Invalid MFA code")
 
     current_user.mfa_enabled = True
     db.commit()
-
     return {"message": "MFA successfully enabled"}
 
 
@@ -178,7 +167,6 @@ def disable_mfa(
     current_user.mfa_enabled = False
     current_user.mfa_secret = None
     db.commit()
-
     return {"message": "MFA disabled"}
 
 

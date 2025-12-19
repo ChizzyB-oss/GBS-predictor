@@ -2,43 +2,74 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr
 
 
-# Base user attributes
+# ============================
+# BASE USER
+# ============================
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
 
 
-# Used when registering a new user (normal or admin)
+# ============================
+# USER CREATION
+# ============================
+
 class UserCreate(UserBase):
     password: str
-    role: str = "user"      # <- Default "user", overridden for admin registration
+    role: str = "clinician"
 
 
-# Used when logging in
+# ============================
+# LOGIN PAYLOAD
+# ============================
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
 
-# Response model for user info
+# ============================
+# USER RESPONSE
+# ============================
+
 class UserResponse(UserBase):
     id: int
     role: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True   # ✅ Pydantic v2 fix
 
 
-# JWT Token response
+# ============================
+# BASIC TOKEN (legacy)
+# ============================
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
-class MfaLoginRequest(BaseModel):
-    email: str
-    password: str
-    otp: str
 
+# ============================
+# MFA PAYLOADS
+# ============================
 
 class MfaConfirmRequest(BaseModel):
     otp: str
+
+
+class MFAVerifyRequest(BaseModel):
+    otp: str
+    temp_token: str
+
+
+# ============================
+# LOGIN RESPONSE (MFA AWARE)
+# ============================
+
+class LoginResponse(BaseModel):
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
+    mfa_required: bool = False
+    temp_token: Optional[str] = None
+    role: Optional[str] = None
