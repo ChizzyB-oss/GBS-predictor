@@ -78,7 +78,7 @@ create_initial_admin()
 # =====================================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],    # Later restrict to your frontend domain
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
