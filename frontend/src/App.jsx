@@ -159,7 +159,10 @@ function AppRoutes() {
 
       <Route path="/mfa" element={<MFAChallenge />} />
 
-<Route path="/predictions/:id" element={<PredictionResultPage />} />
+<Route
+  path="/prediction-result/:id"
+  element={<PredictionResultPage />}
+/>
 
 
       {/* FALLBACK */}

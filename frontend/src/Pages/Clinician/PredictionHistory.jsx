@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { History, FileClock, BarChart3, FileDown } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 import DashboardLayout from "../../Components/DashboardLayout";
 import { useAuth } from "../../Context/AuthContext";
 import { predictionApi } from "../../api/client";
 
 export default function PredictionHistory() {
   const { token } = useAuth();
+  const navigate = useNavigate();
+
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,9 +60,12 @@ export default function PredictionHistory() {
   useEffect(() => {
     async function loadHistory() {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/prediction/history", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          "http://127.0.0.1:8000/api/prediction/history",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
 
         if (!res.ok) throw new Error("Failed to load predictions");
 
@@ -127,7 +134,7 @@ export default function PredictionHistory() {
                 bg-white dark:bg-slate-900 
                 border border-slate-200 dark:border-slate-800 
                 rounded-xl shadow-sm p-6 
-                hover:shadow-md transition 
+                hover:shadow-md transition
               "
             >
               {/* TOP ROW */}
@@ -157,20 +164,39 @@ export default function PredictionHistory() {
                   </div>
                 </div>
 
-                {/* PDF BUTTON */}
-                <button
-                  onClick={() => handleDownloadPDF(p.id)}
-                  className="
-                    flex items-center gap-2 px-4 py-2
-                    rounded-md bg-blue-600 hover:bg-blue-700 
-                    dark:bg-blue-500 dark:hover:bg-blue-600
-                    text-white text-sm font-semibold
-                    shadow-sm transition
-                  "
-                >
-                  <FileDown className="w-4 h-4" />
-                  Report
-                </button>
+                {/* ACTION BUTTONS */}
+                <div className="flex items-center gap-3">
+                  {/* VIEW DETAILS */}
+                  <button
+                    onClick={() => navigate(`/prediction-result/${p.id}`)}
+                    className="
+                      px-4 py-2 rounded-md
+                      border border-slate-300 dark:border-slate-700
+                      text-slate-700 dark:text-slate-300
+                      bg-white dark:bg-slate-800
+                      hover:bg-slate-50 dark:hover:bg-slate-700
+                      text-sm font-medium
+                      transition
+                    "
+                  >
+                    View Details
+                  </button>
+
+                  {/* PDF */}
+                  <button
+                    onClick={() => handleDownloadPDF(p.id)}
+                    className="
+                      flex items-center gap-2 px-4 py-2
+                      rounded-md bg-blue-600 hover:bg-blue-700 
+                      dark:bg-blue-500 dark:hover:bg-blue-600
+                      text-white text-sm font-semibold
+                      shadow-sm transition
+                    "
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Report
+                  </button>
+                </div>
               </div>
 
               {/* PATIENT INFO */}
@@ -179,7 +205,8 @@ export default function PredictionHistory() {
                   <span className="font-medium">Age:</span> {p.input_data.age}
                 </p>
                 <p className="text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">Gender:</span> {p.input_data.gender}
+                  <span className="font-medium">Gender:</span>{" "}
+                  {p.input_data.gender}
                 </p>
                 <p className="text-slate-700 dark:text-slate-300">
                   <span className="font-medium">CSF Protein:</span>{" "}

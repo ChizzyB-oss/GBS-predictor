@@ -165,6 +165,14 @@ export const predictionApi = {
     });
   },
 
+  // ✅ ADD THIS
+  getPredictionById(predictionId, token) {
+    return apiRequest(`/api/prediction/${predictionId}`, {
+      method: "GET",
+      token,
+    });
+  },
+
   downloadReport(predictionId, token) {
     return apiDownload(`/api/predictions/${predictionId}/report`, token);
   },

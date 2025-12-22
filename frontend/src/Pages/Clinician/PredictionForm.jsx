@@ -7,13 +7,14 @@ import {
   Thermometer,
   Loader2,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import DashboardLayout from "../../Components/DashboardLayout";
-import PredictionResultModal from "../../Components/PredictionResultModal";
 import { useAuth } from "../../Context/AuthContext";
 
 export default function PredictionForm() {
   const { token } = useAuth();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     age: "",
@@ -35,8 +36,6 @@ export default function PredictionForm() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
-  const [prediction, setPrediction] = useState(null);
-  const [showModal, setShowModal] = useState(false);
 
   // ---------------------------
   // Change handler
@@ -49,7 +48,7 @@ export default function PredictionForm() {
     }));
   };
 
-  // Clinical pill style
+  // Clinical pill style (UNCHANGED)
   const symptomPillClasses = (active) =>
     [
       "flex items-center justify-between gap-2 px-4 py-2 rounded-md text-sm font-medium",
@@ -59,7 +58,7 @@ export default function PredictionForm() {
         : "bg-white dark:bg-slate-800 border-slate-300 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700",
     ].join(" ");
 
-  // UNIVERSAL input/select style
+  // UNIVERSAL input/select style (UNCHANGED)
   const inputBase =
     "w-full px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 " +
     "text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200 " +
@@ -111,8 +110,11 @@ export default function PredictionForm() {
       }
 
       const result = await res.json();
-      setPrediction(result);
-      setShowModal(true);
+
+      navigate(`/prediction-result/${result.id}`, {
+  state: { result },
+});
+
     } catch (error) {
       console.error("Network error:", error);
       alert("Unable to connect to server");
@@ -433,7 +435,7 @@ export default function PredictionForm() {
               </div>
             </section>
 
-            {/* ================== ACTION BUTTONS ================== */}
+{/* ================== ACTION BUTTONS ================== */}
             <div className="flex items-center justify-end gap-4 pt-2">
               <button
                 type="button"
@@ -470,15 +472,6 @@ export default function PredictionForm() {
               </button>
             </div>
           </form>
-
-          {/* ================== RESULT MODAL ================== */}
-          {showModal && prediction && (
-            <PredictionResultModal
-              open={showModal}
-              result={prediction}
-              onClose={() => setShowModal(false)}
-            />
-          )}
         </div>
       </div>
     </DashboardLayout>
