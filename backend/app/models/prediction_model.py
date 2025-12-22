@@ -14,6 +14,8 @@ class Prediction(Base):
     predicted_subtype = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
     probabilities = Column(Text, nullable=False)  # JSON string
+    features_used = Column(Text, nullable=True)
+    shap = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
