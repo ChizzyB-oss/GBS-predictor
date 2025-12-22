@@ -48,3 +48,52 @@ def get_my_prediction_history(
         })
 
     return result
+
+@router.get("/{prediction_id}")
+def get_single_prediction(
+    prediction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prediction = (
+        db.query(Prediction)
+        .filter(Prediction.id == prediction_id)
+        .filter(Prediction.user_id == current_user.id)
+        .first()
+    )
+
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    # ---------- SAFE JSON PARSING ----------
+    try:
+        input_data = json.loads(prediction.input_data) if prediction.input_data else {}
+    except Exception:
+        input_data = {}
+
+    try:
+        probabilities = json.loads(prediction.probabilities) if prediction.probabilities else {}
+    except Exception:
+        probabilities = {}
+
+    try:
+        features_used = json.loads(prediction.features_used) if prediction.features_used else []
+    except Exception:
+        features_used = []
+
+    try:
+        shap_data = json.loads(prediction.shap) if prediction.shap else None
+    except Exception:
+        shap_data = None
+    # --------------------------------------
+
+    return {
+        "id": prediction.id,
+        "input_data": input_data,
+        "predicted_subtype": prediction.predicted_subtype,
+        "confidence": prediction.confidence,
+        "probabilities": probabilities,
+        "features_used": features_used,
+        "shap": shap_data,
+        "created_at": prediction.created_at,
+    }
