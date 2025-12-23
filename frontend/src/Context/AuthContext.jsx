@@ -14,6 +14,7 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [tempToken, setTempToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("gbs_token");
@@ -57,6 +58,15 @@ export function AuthProvider({ children }) {
     }
 
     return await fetchAndStoreUser(data.access_token);
+  };
+
+    const registerClinician = async ({ email, fullName, password }) => {
+    setError(null);
+    await authApi.registerClinician({
+      email,
+      full_name: fullName,
+      password,
+    });
   };
 
   // =============================
@@ -112,7 +122,9 @@ const disableMfa = async () => {
       user,
       token,
       loading,
+      error,
       login,
+      registerClinician,
       verifyOtp,
       disableMfa,
       logout,

@@ -8,7 +8,7 @@ import registerPreview from "../assets/images/register-preview.png";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { registerClinician, loginClinician } = useAuth();
+  const { registerClinician, login } = useAuth();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
     try {
       await registerClinician(form);
-      await loginClinician(form);
+      await login(form);
       navigate("/clinician/dashboard");
     } catch (err) {
       setErrorMsg(err.message || "Registration failed");
