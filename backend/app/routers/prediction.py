@@ -57,6 +57,8 @@ def predict_gbs_subtype(
             predicted_subtype=predicted_subtype,
             confidence=confidence,
             probabilities=json.dumps(probabilities),
+            features_used=json.dumps(features_used),
+            shap=json.dumps(shap) if shap else None,
             created_at=datetime.utcnow(),
         )
 
