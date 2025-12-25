@@ -31,6 +31,7 @@ router = APIRouter(tags=["Auth"])
 # ============================================================
 @router.post("/register", response_model=UserResponse)
 def register_clinician(user_in: UserCreate, db: Session = Depends(get_db)):
+    print("FULL NAME RECEIVED:", user_in.full_name)
     user_in.role = "clinician"
     return create_user(db, user_in)
 
