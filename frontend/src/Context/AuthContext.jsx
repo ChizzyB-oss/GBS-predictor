@@ -60,11 +60,11 @@ export function AuthProvider({ children }) {
     return await fetchAndStoreUser(data.access_token);
   };
 
-    const registerClinician = async ({ email, fullName, password }) => {
+    const registerClinician = async ({ email, full_name, password }) => {
     setError(null);
     await authApi.registerClinician({
       email,
-      full_name: fullName,
+      full_name: full_name,
       password,
     });
   };

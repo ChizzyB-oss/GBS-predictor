@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { registerClinician, login } = useAuth();
 
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -97,6 +97,14 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
+              label="Full Name"
+              type="text"
+              name="full_name"
+              value={form.full_name}
+              onChange={handleChange}
+            />
+
+            <Input
               label="Email"
               type="email"
               name="email"
@@ -138,7 +146,7 @@ export default function RegisterPage() {
   );
 }
 
-function Input({ label, ...props }) {
+function Input({ label, onChange, ...props }) {
   return (
     <div>
       <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">
@@ -146,6 +154,7 @@ function Input({ label, ...props }) {
       </label>
       <input
         {...props}
+        onChange={onChange}
         required
         className="
           w-full px-4 py-3 rounded-xl
