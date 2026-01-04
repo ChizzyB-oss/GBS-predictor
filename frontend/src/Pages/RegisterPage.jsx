@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../Context/AuthContext";
 import { UserPlus, Stethoscope } from "lucide-react";
+import PasswordInput from "../Components/PasswordInput";
 
 import registerPreview from "../assets/images/register-preview.png";
 
@@ -10,12 +11,17 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { registerClinician, login } = useAuth();
 
-  const [form, setForm] = useState({ full_name: "", email: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirmPassword: "" });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
+
+  const passwordsMatch =
+    form.password &&
+    form.confirmPassword &&
+    form.password === form.confirmPassword;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -112,22 +118,35 @@ export default function RegisterPage() {
               onChange={handleChange}
             />
 
-            <Input
+            <PasswordInput
               label="Password"
-              type="password"
               name="password"
               value={form.password}
               onChange={handleChange}
             />
 
+            <PasswordInput
+              label="Confirm Password"
+              name="confirmPassword"
+              value={form.confirmPassword}
+              onChange={handleChange}
+            />
+
+            {form.confirmPassword && !passwordsMatch && (
+              <p className="text-sm text-red-500">
+                Passwords do not match
+              </p>
+            )}
+
             <button
-              disabled={loading}
+              disabled={loading || !passwordsMatch}
               className="
                 w-full py-3 rounded-xl
                 bg-blue-600 hover:bg-blue-700
                 text-white font-semibold
                 shadow-md hover:shadow-lg
                 transition
+                disabled:opacity-50
               "
             >
               {loading ? "Creating account…" : "Register"}

@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../Context/AuthContext";
 import { Stethoscope, KeyRound } from "lucide-react";
+import PasswordInput from "../Components/PasswordInput";
 
 import loginPreview from "../assets/images/login-preview.png";
 
@@ -130,13 +131,13 @@ export default function LoginPage() {
                   onChange={handleChange}
                 />
 
-                <Input
+                <PasswordInput
                   label="Password"
                   name="password"
-                  type="password"
                   value={form.password}
                   onChange={handleChange}
                 />
+
 
                 <button
                   disabled={loading}
