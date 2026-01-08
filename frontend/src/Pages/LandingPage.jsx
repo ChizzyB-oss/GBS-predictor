@@ -10,6 +10,7 @@ import {
   ArrowRight,
   CheckCircle2
 } from "lucide-react";
+import dashboardPreview from "../assets/images/dashboard-preview.png";
 
 export default function LandingPage() {
   return (
@@ -93,9 +94,15 @@ export default function LandingPage() {
             className="relative"
           >
             <div className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 p-8">
-              <div className="h-72 rounded-2xl bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center text-center text-slate-600 dark:text-slate-300 font-medium">
-                Clinical Dashboard Preview<br />
-              </div>
+              <img
+                src={dashboardPreview}
+                alt="Clinical dashboard preview"
+                className="
+                  h-72 w-full object-cover
+                  rounded-2xl
+                  border border-slate-200 dark:border-slate-700
+                  "
+              />
             </div>
           </motion.div>
         </div>

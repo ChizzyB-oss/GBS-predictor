@@ -121,13 +121,14 @@ export default function PredictionResultPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto py-10 px-4">
+      <div className="w-full max-w-6xl mx-auto py-10 px-4">
         <div
           className="
             w-full rounded-xl
             bg-white dark:bg-slate-900
             border border-slate-200 dark:border-slate-800
-            shadow-xl p-8
+            shadow-lg
+            p-6 sm:p-8
           "
         >
           {/* Back Button */}
@@ -341,7 +342,7 @@ export default function PredictionResultPage() {
           </div>
 
           {/* ================= Action Buttons ================= */}
-          <div className="mt-10 flex gap-4">
+          <div className="mt-10 flex flex-col sm:flex-row gap-4">
             <button
               onClick={() => navigate("/clinician/predict")}
               className="
