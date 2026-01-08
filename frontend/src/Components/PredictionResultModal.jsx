@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, FileText, ArrowLeft } from "lucide-react";
 
 import DashboardLayout from "../Components/DashboardLayout";
+import ChatbotPanel from "../Components/ChatbotPanel";
 import { API_BASE_URL, predictionApi } from "../api/client";
 import { useAuth } from "../Context/AuthContext";
 
@@ -370,6 +371,7 @@ export default function PredictionResultPage() {
           </div>
         </div>
       </div>
+      <ChatbotPanel prediction={result} />
     </DashboardLayout>
   );
 }

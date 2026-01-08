@@ -19,6 +19,7 @@ import AdminMonitoring from "./Pages/Admin/AdminMonitoring";
 
 import ProtectedRoute from "./Components/ProtectedRoute";
 import PredictionResultPage from "./Components/PredictionResultModal";
+import ChatbotPanel from "./Components/ChatbotPanel";
 import { AuthProvider } from "./Context/AuthContext";
 
 function AppRoutes() {
@@ -163,7 +164,6 @@ function AppRoutes() {
   path="/prediction-result/:id"
   element={<PredictionResultPage />}
 />
-
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/" />} />

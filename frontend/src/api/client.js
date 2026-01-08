@@ -281,3 +281,22 @@ export const profileApi = {
     });
   },
 };
+
+export const chatbotApi = {
+  explainPrediction: async (payload, token) => {
+    const res = await fetch(`${API_BASE_URL}/chat/explain`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error("Chatbot request failed");
+    }
+
+    return res.json();
+  },
+};
