@@ -10,6 +10,7 @@ from .routers.admin_users import router as admin_users_router
 from .routers.analytics import router as analytics_router
 from .routers.admin_settings import router as admin_settings_router
 from .routers.profile import router as profile_router
+from .routers.chatbot import router as chatbot_router
 
 from .core.database import Base, engine, SessionLocal
 from .models.user_model import User
@@ -111,6 +112,9 @@ app.include_router(admin_settings_router, prefix="/api")
 
 #PROFILE
 app.include_router(profile_router, prefix="/api")
+
+#CHATBOT
+app.include_router(chatbot_router)
 
 
 @app.get("/health")

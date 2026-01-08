@@ -11,7 +11,6 @@ from ..services.auth_service import get_current_user
 from ..core.database import get_db
 from ..models.prediction_model import Prediction
 
-# NEW — PDF generator
 from ..services.report_service import generate_prediction_pdf
 
 
