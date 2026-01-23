@@ -6,6 +6,19 @@ from ..models.prediction_model import Prediction
 from ..models.user_model import User
 import json
 
+from typing import Dict
+
+def _confidence_interval(p: float, margin: float = 0.07) -> Dict[str, float]:
+    """Simple bounded confidence interval around predicted probability."""
+    try:
+        p = float(p)
+    except Exception:
+        p = 0.0
+
+    lower = max(0.0, p - margin)
+    upper = min(1.0, p + margin)
+    return {"lower": round(lower, 4), "upper": round(upper, 4)}
+
 router = APIRouter(
     prefix="/prediction",
     tags=["Prediction History"]
@@ -38,11 +51,13 @@ def get_my_prediction_history(
         except:
             probabilities = {}
 
+        conf = float(r.confidence or 0.0)
         result.append({
             "id": r.id,
             "input_data": input_data,                
             "predicted_subtype": r.predicted_subtype,
             "confidence": r.confidence,
+            "confidence_interval": _confidence_interval(conf, margin=0.07),
             "probabilities": probabilities,        
             "created_at": r.created_at,
         })
@@ -87,11 +102,13 @@ def get_single_prediction(
         shap_data = None
     # --------------------------------------
 
+    conf = float(prediction.confidence or 0.0)
     return {
         "id": prediction.id,
         "input_data": input_data,
         "predicted_subtype": prediction.predicted_subtype,
         "confidence": prediction.confidence,
+        "confidence_interval": _confidence_interval(conf, margin=0.07),
         "probabilities": probabilities,
         "features_used": features_used,
         "shap": shap_data,

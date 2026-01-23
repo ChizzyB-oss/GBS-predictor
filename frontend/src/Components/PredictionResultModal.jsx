@@ -72,7 +72,12 @@ export default function PredictionResultPage() {
   const shap = result.shap || null;
   const shapValues = shap?.shap_values || {};
   const ranked = shap?.ranked_importance || [];
-  const hasShap = shap && Object.keys(shapValues).length > 0;
+  const hasShap = shap && Array.isArray(ranked) && ranked.length > 0;
+  const topRanked = ranked.slice(0, 8); // match PDF top 8
+  const maxAbsImpact =
+  topRanked.length > 0
+    ? Math.max(...topRanked.map(([, v]) => Math.abs(Number(v) || 0)))
+    : 1;
 
   // Probability colours (UNCHANGED)
   const subtypeColors = {
@@ -176,13 +181,30 @@ export default function PredictionResultPage() {
               {result.predicted_subtype}
             </span>
 
-            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-              Confidence
-            </p>
+{/* Confidence Interval */}
+<p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+  Confidence Interval
+</p>
 
-            <p className="text-4xl font-bold text-slate-900 dark:text-white">
-              {(result.confidence * 100).toFixed(1)}%
-            </p>
+{result.confidence_interval?.lower != null &&
+ result.confidence_interval?.upper != null ? (
+  <>
+    <p className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">
+      {(result.confidence_interval.lower * 100).toFixed(1)}% –{" "}
+      {(result.confidence_interval.upper * 100).toFixed(1)}%
+    </p>
+
+    {/* Optional: keep point estimate small for transparency */}
+    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      Point estimate: {(result.confidence * 100).toFixed(1)}%
+    </p>
+  </>
+) : (
+  // Fallback for older predictions that don't have CI yet
+  <p className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white">
+    {(result.confidence * 100).toFixed(1)}%
+  </p>
+)}
           </div>
 
           {/* ================= Clinical Guidance ================= */}
@@ -248,71 +270,82 @@ export default function PredictionResultPage() {
             </div>
           </div>
 
-          {/* ================= SHAP Explainability ================= */}
-          <div className="mt-10">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">
-              Model Explainability
-            </h3>
+{/* ================= SHAP Explainability ================= */}
+<div className="mt-10">
+  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-3">
+    Model Explainability (SHAP)
+  </h3>
 
-            {!hasShap && (
-              <p className="text-slate-500 dark:text-slate-400 text-sm">
-                SHAP explainability data not available.
-              </p>
-            )}
+  {!hasShap && (
+    <p className="text-slate-500 dark:text-slate-400 text-sm">
+      SHAP explainability data not available.
+    </p>
+  )}
 
-            {hasShap && (
-              <>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                  Features contributing most to the prediction:
-                </p>
+  {hasShap && (
+    <>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+        Top feature contributions for this prediction (higher values indicate stronger influence).
+      </p>
 
-                <div className="space-y-5">
-                  {ranked.slice(0, 6).map(([feature]) => {
-                    const impact = shapValues[feature];
-                    const positive = impact >= 0;
+      {/* Table header */}
+      <div className="hidden sm:grid grid-cols-12 text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-2">
+        <div className="col-span-5">Feature</div>
+        <div className="col-span-5">Contribution (|SHAP|)</div>
+        <div className="col-span-2 text-right">Value</div>
+      </div>
 
-                    return (
-                      <div key={feature} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">
-                            {feature.replace(/_/g, " ")}
-                          </span>
+      <div className="space-y-3">
+        {topRanked.map(([feature, impactRaw]) => {
+          const impact = Math.abs(Number(impactRaw) || 0);
+          const widthPct = Math.min(100, (impact / (maxAbsImpact || 1)) * 100);
 
-                          <span
-                            className={`font-semibold ${
-                              positive
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
-                            }`}
-                          >
-                            {positive
-                              ? "↑ increases likelihood"
-                              : "↓ decreases likelihood"}
-                          </span>
-                        </div>
-
-                        <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-md overflow-hidden">
-                          <div
-                            className={`h-3 rounded-md transition-all ${
-                              positive
-                                ? "bg-green-500"
-                                : "bg-red-500"
-                            }`}
-                            style={{
-                              width: `${Math.min(
-                                Math.abs(impact) * 250,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+          return (
+            <div
+              key={feature}
+              className="
+                rounded-lg border border-slate-200 dark:border-slate-800
+                bg-white dark:bg-slate-900
+                p-3
+              "
+            >
+              <div className="grid grid-cols-12 gap-3 items-center">
+                {/* Feature name */}
+                <div className="col-span-12 sm:col-span-5">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {String(feature).replace(/_/g, " ")}
+                  </p>
                 </div>
-              </>
-            )}
-          </div>
+
+                {/* Bar */}
+                <div className="col-span-10 sm:col-span-5">
+                  <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-md overflow-hidden">
+                    <div
+                      className="h-3 rounded-md bg-purple-600 dark:bg-purple-500 transition-all"
+                      style={{ width: `${widthPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Numeric */}
+                <div className="col-span-2 text-right">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {impact.toFixed(4)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Optional note mirrors PDF wording */}
+      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+        Note: SHAP values quantify the contribution of each feature to this individual prediction.
+      </p>
+    </>
+  )}
+</div>
 
           {/* ================= Features Used ================= */}
           <div className="mt-10">

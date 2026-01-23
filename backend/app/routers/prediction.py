@@ -16,6 +16,16 @@ from ..services.report_service import generate_prediction_pdf
 
 router = APIRouter(tags=["Prediction"])
 
+def _confidence_interval(p: float, margin: float = 0.07) -> Dict[str, float]:
+    """Simple bounded confidence interval around predicted probability."""
+    try:
+        p = float(p)
+    except Exception:
+        p = 0.0
+
+    lower = max(0.0, p - margin)
+    upper = min(1.0, p + margin)
+    return {"lower": round(lower, 4), "upper": round(upper, 4)}
 
 # =====================================================================
 # 🔵 RUN A NEW PREDICTION
@@ -43,6 +53,7 @@ def predict_gbs_subtype(
 
         predicted_subtype = str(result.get("predicted_subtype"))
         confidence = float(result.get("confidence", 0.0))
+        confidence_interval = _confidence_interval(confidence, margin=0.07)
         probabilities = result.get("probabilities", {})
         features_used = result.get("features_used", [])
         shap = result.get("shap")  # could be None
@@ -71,6 +82,7 @@ def predict_gbs_subtype(
         return {
             "predicted_subtype": predicted_subtype,
             "confidence": confidence,
+            "confidence_interval": confidence_interval,
             "probabilities": probabilities,
             "features_used": features_used,
             "shap": shap,
@@ -132,9 +144,11 @@ def download_prediction_report(
     # - probabilities
     # - shap  <-- this is what PDF needs
 
+    conf = float(result.get("confidence", 0.0))
     pred_dict = {
         "predicted_subtype": result["predicted_subtype"],
-        "confidence": result["confidence"],
+        "confidence": conf,
+        "confidence_interval": _confidence_interval(conf, margin=0.07),
         "probabilities": result["probabilities"],
     }
 
