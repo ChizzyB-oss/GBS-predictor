@@ -69,8 +69,18 @@ def get_clinician_stats(
     )
 
     subtype_counts = {}
+    subtype_conf_sum = {}
     for r in rows:
-        subtype_counts[r.predicted_subtype] = subtype_counts.get(r.predicted_subtype, 0) + 1
+        st = r.predicted_subtype or "Unknown"
+        subtype_counts[st] = subtype_counts.get(st, 0) + 1
+
+        conf = float(r.confidence or 0.0)
+        subtype_conf_sum[st] = subtype_conf_sum.get(st, 0.0) + conf
+
+    avg_conf_by_subtype = {
+        st: (subtype_conf_sum[st] / subtype_counts[st])
+        for st in subtype_counts
+    }
 
     # -----------------------------
     # 5) MOST COMMON SUBTYPE
@@ -113,6 +123,7 @@ def get_clinician_stats(
         "most_common_subtype": most_common,
         "avg_confidence": avg_conf,  # decimal, frontend multiplies by 100
         "subtype_distribution": subtype_counts,
+        "avg_confidence_by_subtype": avg_conf_by_subtype,
         "predictions_over_time": preds_time_dict,
         "recent_predictions": recent_preds,
     }

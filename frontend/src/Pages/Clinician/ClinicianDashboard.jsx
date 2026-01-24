@@ -32,6 +32,10 @@ export default function ClinicianDashboard() {
   const [predictionsPerDay, setPredictionsPerDay] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
 
+  function formatPct(v) {
+  if (v == null || Number.isNaN(Number(v))) return "-";
+  return (Number(v) * 100).toFixed(1) + "%";
+}
   const COLORS = ["#2563EB", "#059669", "#D97706", "#D946EF"];
 
   useEffect(() => {
@@ -51,11 +55,14 @@ export default function ClinicianDashboard() {
         avgConfidence: (stats.avg_confidence * 100).toFixed(1) + "%",
       });
 
+      const dist = stats.subtype_distribution || {};
+      const avgBySubtype = stats.avg_confidence_by_subtype || {}; // NEW (backend will add)
       setSubtypeData(
-        Object.entries(stats.subtype_distribution).map(([key, value]) => ({
-          name: key,
-          value,
-        }))
+        Object.entries(dist).map(([subtype, count]) => ({
+        name: subtype,
+        value: count,
+        avg_confidence: avgBySubtype[subtype] ?? null,
+         }))
       );
 
       setPredictionsPerDay(
@@ -149,23 +156,35 @@ export default function ClinicianDashboard() {
               Distribution of predicted GBS subtypes across your cases.
             </p>
 
-            <div className="h-64">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={subtypeData}
-                    dataKey="value"
-                    outerRadius={90}
-                    innerRadius={55}
-                    paddingAngle={3}
-                  >
-                    {subtypeData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+<div className="h-64">
+  <ResponsiveContainer>
+    <PieChart>
+      <Tooltip
+        formatter={(value, _name, props) => {
+          const avg = props?.payload?.avg_confidence;
+          return [`${value} cases • Avg: ${formatPct(avg)}`, "Count"];
+        }}
+        labelFormatter={(label) => `Subtype: ${label}`}
+        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+      />
+
+      <Pie
+        data={subtypeData}
+        dataKey="value"
+        nameKey="name"
+        outerRadius={90}
+        innerRadius={55}
+        paddingAngle={3}
+        labelLine={false}
+        label={({ name }) => name}   // ✅ show subtype names on the chart
+      >
+        {subtypeData.map((_, i) => (
+          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+        ))}
+      </Pie>
+    </PieChart>
+  </ResponsiveContainer>
+</div>
           </div>
 
           {/* Predictions Over Time */}
