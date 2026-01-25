@@ -79,6 +79,20 @@ export default function PredictionResultPage() {
     ? Math.max(...topRanked.map(([, v]) => Math.abs(Number(v) || 0)))
     : 1;
 
+  function urgencyLevel(pct) {
+  if (pct >= 70) return "high";
+  if (pct >= 50) return "moderate";
+  return "low";
+}
+
+function urgencyClasses(level) {
+  if (level === "high")
+    return "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800";
+  if (level === "moderate")
+    return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800";
+  return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800";
+}
+
   // Probability colours (UNCHANGED)
   const subtypeColors = {
     AIDP: "#2563EB",
@@ -124,6 +138,16 @@ export default function PredictionResultPage() {
     a.click();
     window.URL.revokeObjectURL(url);
   }
+
+  // ------------------------------
+// Confidence Interval -> Urgency colour (triage meaning)
+// Use LOWER bound to be conservative
+// ------------------------------
+const ci = result?.confidence_interval;
+const lowerBoundPct =
+  ci?.lower != null ? ci.lower * 100 : (result.confidence ?? 0) * 100;
+
+const urgency = urgencyLevel(lowerBoundPct);
 
   return (
     <DashboardLayout>
@@ -198,6 +222,20 @@ export default function PredictionResultPage() {
     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
       Point estimate: {(result.confidence * 100).toFixed(1)}%
     </p>
+    <span
+  className={`
+    mt-2 inline-flex items-center px-3 py-1 rounded-full
+    text-xs font-semibold border
+    ${urgencyClasses(urgency)}
+  `}
+>
+  {urgency === "high" && "High urgency – prompt clinical review advised"}
+  {urgency === "moderate" && "Moderate urgency – interpret with caution"}
+  {urgency === "low" && "Lower urgency – monitor alongside clinical context"}
+</span>
+<p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+  Colour indicates urgency based on probability strength (not model certainty).
+</p>
   </>
 ) : (
   // Fallback for older predictions that don't have CI yet

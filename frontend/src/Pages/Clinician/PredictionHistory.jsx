@@ -32,6 +32,30 @@ export default function PredictionHistory() {
   };
 
   // ------------------------------
+// Urgency colouring based on CI lower bound (triage meaning)
+// ------------------------------
+const urgencyLevel = (pct) => {
+  if (pct >= 70) return "high";
+  if (pct >= 50) return "moderate";
+  return "low";
+};
+
+const urgencyClasses = (level) => {
+  if (level === "high")
+    return "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800";
+  if (level === "moderate")
+    return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800";
+  return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800";
+};
+
+const urgencyBarColor = (level) => {
+  if (level === "high") return "bg-red-600 dark:bg-red-500";
+  if (level === "moderate") return "bg-amber-600 dark:bg-amber-500";
+  return "bg-emerald-600 dark:bg-emerald-500";
+};
+
+
+  // ------------------------------
   // Download PDF
   // ------------------------------
   const handleDownloadPDF = async (id) => {
@@ -150,18 +174,51 @@ export default function PredictionHistory() {
                     {p.predicted_subtype}
                   </span>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                      Confidence: {(p.confidence * 100).toFixed(1)}%
-                    </span>
+                  {(() => {
+  const ci = p.confidence_interval;
+  const hasCI = ci?.lower != null && ci?.upper != null;
 
-                    <div className="w-32 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-600 dark:bg-blue-500 rounded-full"
-                        style={{ width: `${p.confidence * 100}%` }}
-                      />
-                    </div>
-                  </div>
+  const lowerPct = hasCI ? ci.lower * 100 : (p.confidence ?? 0) * 100;
+  const upperPct = hasCI ? ci.upper * 100 : (p.confidence ?? 0) * 100;
+
+  const urgency = urgencyLevel(lowerPct);
+
+  return (
+    <>
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
+          {hasCI
+            ? `CI: ${lowerPct.toFixed(1)}%–${upperPct.toFixed(1)}%`
+            : `Confidence: ${(p.confidence * 100).toFixed(1)}%`}
+        </span>
+
+        {/* Urgency badge */}
+        <span
+          className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${urgencyClasses(
+            urgency
+          )}`}
+        >
+          {urgency === "high" && "High urgency"}
+          {urgency === "moderate" && "Moderate urgency"}
+          {urgency === "low" && "Lower urgency"}
+        </span>
+
+        {/* Bar (use lower bound to be conservative) */}
+        <div className="w-32 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div
+            className={`h-full rounded-full ${urgencyBarColor(urgency)}`}
+            style={{ width: `${Math.min(100, Math.max(0, lowerPct))}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Optional tiny note (helps in showcase) */}
+      <p className="text-[11px] text-slate-500 dark:text-slate-500">
+        Colour indicates urgency based on probability strength.
+      </p>
+    </>
+  );
+})()}
                 </div>
 
                 {/* ACTION BUTTONS */}
