@@ -4,6 +4,7 @@ from ..core.database import get_db
 from ..services.auth_service import get_current_user
 from ..models.prediction_model import Prediction
 from ..models.user_model import User
+from ..models.review_request_model import ReviewRequest
 import json
 
 from typing import Dict
@@ -109,6 +110,59 @@ def get_single_prediction(
         "predicted_subtype": prediction.predicted_subtype,
         "confidence": prediction.confidence,
         "confidence_interval": _confidence_interval(conf, margin=0.07),
+        "probabilities": probabilities,
+        "features_used": features_used,
+        "shap": shap_data,
+        "created_at": prediction.created_at,
+    }
+
+@router.get("/prediction/shared/{prediction_id}")
+def get_shared_prediction(
+    prediction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Allow if user is owner OR recipient of an approved/pending review request
+    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    if prediction.user_id != current_user.id:
+        link = (
+            db.query(ReviewRequest)
+            .filter(ReviewRequest.prediction_id == prediction_id)
+            .filter(ReviewRequest.recipient_id == current_user.id)
+            .first()
+        )
+        if not link:
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    # Return same shape as get_single_prediction
+    try:
+        input_data = json.loads(prediction.input_data) if prediction.input_data else {}
+    except:
+        input_data = {}
+
+    try:
+        probabilities = json.loads(prediction.probabilities) if prediction.probabilities else {}
+    except:
+        probabilities = {}
+
+    try:
+        features_used = json.loads(prediction.features_used) if prediction.features_used else []
+    except:
+        features_used = []
+
+    try:
+        shap_data = json.loads(prediction.shap) if prediction.shap else None
+    except:
+        shap_data = None
+
+    return {
+        "id": prediction.id,
+        "input_data": input_data,
+        "predicted_subtype": prediction.predicted_subtype,
+        "confidence": prediction.confidence,
         "probabilities": probabilities,
         "features_used": features_used,
         "shap": shap_data,

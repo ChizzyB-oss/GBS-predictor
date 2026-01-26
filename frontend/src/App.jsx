@@ -19,7 +19,7 @@ import AdminMonitoring from "./Pages/Admin/AdminMonitoring";
 
 import ProtectedRoute from "./Components/ProtectedRoute";
 import PredictionResultPage from "./Components/PredictionResultModal";
-import ChatbotPanel from "./Components/ChatbotPanel";
+import ReviewInbox from "./Pages/Clinician/ReviewInbox";
 import { AuthProvider } from "./Context/AuthContext";
 
 function AppRoutes() {
@@ -102,6 +102,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      <Route 
+        path="/clinician/reviews" 
+        element={
+          <ProtectedRoute allowed={["clinician"]}>
+            <ReviewInbox /> 
+          </ProtectedRoute>
+        }
+       />
 
       <Route
         path="/clinician/profile"

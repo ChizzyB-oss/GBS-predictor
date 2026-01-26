@@ -176,6 +176,13 @@ export const predictionApi = {
   downloadReport(predictionId, token) {
     return apiDownload(`/api/predictions/${predictionId}/report`, token);
   },
+
+  getSharedPredictionById(predictionId, token) {
+  return apiRequest(`/api/prediction/shared/${predictionId}`, {
+    method: "GET",
+    token,
+  });
+},
 };
 
 // ==============================================
@@ -298,5 +305,27 @@ export const chatbotApi = {
     }
 
     return res.json();
+  },
+};
+
+// ==============================================
+// PEER REVIEW (CLINICIAN-TO-CLINICIAN)
+// ==============================================
+export const reviewApi = {
+  listColleagues(token) {
+    return apiRequest("/api/reviews/colleagues", { method: "GET", token });
+  },
+  requestReview(payload, token) {
+    return apiRequest("/api/reviews/request", { method: "POST", body: payload, token });
+  },
+  inbox(token) {
+    return apiRequest("/api/reviews/inbox", { method: "GET", token });
+  },
+  updateStatus(reviewId, status, token) {
+    return apiRequest(`/api/reviews/${reviewId}/status`, {
+      method: "PATCH",
+      body: { status },
+      token,
+    });
   },
 };

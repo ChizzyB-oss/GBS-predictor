@@ -4,7 +4,7 @@ import { CheckCircle, FileText, ArrowLeft } from "lucide-react";
 
 import DashboardLayout from "../Components/DashboardLayout";
 import ChatbotPanel from "../Components/ChatbotPanel";
-import { API_BASE_URL, predictionApi } from "../api/client";
+import { API_BASE_URL, predictionApi, reviewApi } from "../api/client";
 import { useAuth } from "../Context/AuthContext";
 
 export default function PredictionResultPage() {
@@ -16,6 +16,18 @@ export default function PredictionResultPage() {
   // Result can come from navigation OR be fetched by ID
   const [result, setResult] = useState(location.state?.result || null);
   const [loading, setLoading] = useState(false);
+
+  // ------------------------------
+// Peer review modal state
+// ------------------------------
+const [reviewOpen, setReviewOpen] = useState(false);
+const [colleagues, setColleagues] = useState([]);
+const [reviewRecipientId, setReviewRecipientId] = useState("");
+const [reviewNote, setReviewNote] = useState("");
+const [reviewLoading, setReviewLoading] = useState(false);
+const [reviewError, setReviewError] = useState("");
+const [reviewSuccess, setReviewSuccess] = useState("");
+const [colleaguesLoading, setColleaguesLoading] = useState(false);
 
   // ------------------------------
   // Fetch prediction if opened from history
@@ -138,6 +150,70 @@ function urgencyClasses(level) {
     a.click();
     window.URL.revokeObjectURL(url);
   }
+
+async function openReviewModal() {
+  setReviewOpen(true);
+  setReviewError("");
+  setReviewSuccess("");
+
+  try {
+    setColleaguesLoading(true);
+
+    const data = await reviewApi.listColleagues(token);
+
+    // Accept both shapes: [] OR {colleagues: []}
+    const list =
+      Array.isArray(data) ? data :
+      Array.isArray(data?.colleagues) ? data.colleagues : [];
+
+    setColleagues(list);
+  } catch (e) {
+    console.error(e);
+    setColleagues([]);
+    setReviewError(e.message || "Could not load clinicians.");
+  } finally {
+    setColleaguesLoading(false);
+  }
+}
+
+function closeReviewModal() {
+  setReviewOpen(false);
+  setReviewRecipientId("");
+  setReviewNote("");
+  setReviewError("");
+  setReviewSuccess("");
+}
+
+async function sendReviewRequest() {
+  setReviewError("");
+  setReviewSuccess("");
+
+  if (!reviewRecipientId) {
+    setReviewError("Please select a clinician.");
+    return;
+  }
+
+  try {
+    setReviewLoading(true);
+
+    await reviewApi.requestReview(
+      {
+        recipient_id: Number(reviewRecipientId),
+        prediction_id: Number(result.id),
+        note: reviewNote?.trim() || null,
+      },
+      token
+    );
+
+    setReviewSuccess("Review request sent successfully.");
+    setTimeout(() => closeReviewModal(), 900);
+  } catch (e) {
+    console.error(e);
+    setReviewError(e.message || "Failed to send review request.");
+  } finally {
+    setReviewLoading(false);
+  }
+}
 
   // ------------------------------
 // Confidence Interval -> Urgency colour (triage meaning)
@@ -439,9 +515,183 @@ const urgency = urgencyLevel(lowerBoundPct);
               <FileText className="w-5 h-5" />
               Download Full PDF Report
             </button>
+
+            <button
+  onClick={openReviewModal}
+  className="
+    flex-1 py-3 rounded-md
+    border border-slate-300 dark:border-slate-700
+    bg-white dark:bg-slate-800
+    text-slate-800 dark:text-white
+    hover:bg-slate-100 dark:hover:bg-slate-700
+    font-semibold transition
+  "
+>
+  Request Peer Review
+</button>
           </div>
         </div>
       </div>
+      {reviewOpen && (
+  <div
+    className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+    role="dialog"
+    aria-modal="true"
+  >
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/40"
+      onClick={closeReviewModal}
+    />
+
+    {/* Modal */}
+    <div
+      className="
+        relative w-full max-w-lg
+        rounded-xl bg-white dark:bg-slate-900
+        border border-slate-200 dark:border-slate-800
+        shadow-2xl
+        p-6
+      "
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            Request Peer Review
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Send this prediction to another clinician for feedback.
+          </p>
+        </div>
+
+        <button
+          onClick={closeReviewModal}
+          className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Prediction summary */}
+      <div className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
+          <span className="font-semibold">Prediction:</span> {result.predicted_subtype}
+        </p>
+        <p className="text-sm text-slate-700 dark:text-slate-300 mt-1">
+          <span className="font-semibold">ID:</span> {result.id}
+        </p>
+      </div>
+
+      {/* Colleague dropdown */}
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+          Select clinician
+        </label>
+
+        <select
+          value={reviewRecipientId}
+          onChange={(e) => setReviewRecipientId(e.target.value)}
+          className="
+            w-full rounded-md
+            border border-slate-300 dark:border-slate-700
+            bg-white dark:bg-slate-900
+            px-3 py-2
+            text-slate-900 dark:text-slate-100
+            focus:outline-none focus:ring-2 focus:ring-blue-500
+          "
+          disabled={colleaguesLoading}
+        >
+          <option value="">
+            {colleaguesLoading ? "Loading clinicians..." : "Choose a clinician"}
+          </option>
+
+          {colleagues.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.full_name ? `${c.full_name} (${c.email})` : c.email}
+            </option>
+          ))}
+        </select>
+
+        {(!colleaguesLoading && colleagues.length === 0) && (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            No other clinicians found. Create another clinician account to demo this feature.
+          </p>
+        )}
+      </div>
+
+      {/* Note */}
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+          Note (optional)
+        </label>
+        <textarea
+          value={reviewNote}
+          onChange={(e) => setReviewNote(e.target.value)}
+          rows={3}
+          className="
+            w-full rounded-md
+            border border-slate-300 dark:border-slate-700
+            bg-white dark:bg-slate-900
+            px-3 py-2
+            text-slate-900 dark:text-slate-100
+            focus:outline-none focus:ring-2 focus:ring-blue-500
+          "
+          placeholder="Add context for the reviewer (e.g., symptom details, concerns)."
+        />
+      </div>
+
+      {/* Messages */}
+      {reviewError && (
+        <div className="mt-4 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+          {reviewError}
+        </div>
+      )}
+
+      {reviewSuccess && (
+        <div className="mt-4 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-md p-3">
+          {reviewSuccess}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={closeReviewModal}
+          className="
+            flex-1 py-2.5 rounded-md
+            border border-slate-300 dark:border-slate-700
+            bg-white dark:bg-slate-800
+            text-slate-800 dark:text-white
+            hover:bg-slate-100 dark:hover:bg-slate-700
+            transition
+          "
+          disabled={reviewLoading}
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={sendReviewRequest}
+          className="
+            flex-1 py-2.5 rounded-md
+            bg-blue-600 hover:bg-blue-700
+            text-white font-semibold
+            transition
+            disabled:opacity-60 disabled:cursor-not-allowed
+          "
+          disabled={reviewLoading || colleaguesLoading}
+        >
+          {reviewLoading ? "Sending..." : "Send Request"}
+        </button>
+      </div>
+
+      <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+        Requests are internal to the system and recorded for auditability.
+      </p>
+    </div>
+  </div>
+)}
       <ChatbotPanel prediction={result} />
     </DashboardLayout>
   );

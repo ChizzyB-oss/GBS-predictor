@@ -11,7 +11,8 @@ import {
   Settings,
   BarChart3,
   LogOut,
-  Menu
+  Menu,
+  Inbox
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -24,6 +25,7 @@ export default function Sidebar() {
     { name: "Make Prediction", to: "/clinician/predict", icon: Activity },
     { name: "Prediction History", to: "/clinician/history", icon: FileClock },
     { name: "Profile Settings", to: "/clinician/profile", icon: UserCog },
+    { name: "Review Inbox", to: "/clinician/reviews", icon: Inbox }
   ];
 
   const adminLinks = [

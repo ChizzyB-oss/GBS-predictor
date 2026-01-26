@@ -11,14 +11,16 @@ from .routers.analytics import router as analytics_router
 from .routers.admin_settings import router as admin_settings_router
 from .routers.profile import router as profile_router
 from .routers.chatbot import router as chatbot_router
+from .routers.review_requests import router as review_requests_router
 
 from .core.database import Base, engine, SessionLocal
 from .models.user_model import User
 from .models.settings_model import SystemSettings
+from .models.review_request_model import ReviewRequest
 from .services.auth_service import hash_password
 
 # Ensure DB tables exist
-from .models import user_model, prediction_model  # noqa
+from .models import user_model, prediction_model, review_request_model   # noqa
 
 app = FastAPI(title="GBS Predictor API", version="1.0")
 
@@ -115,6 +117,9 @@ app.include_router(profile_router, prefix="/api")
 
 #CHATBOT
 app.include_router(chatbot_router)
+
+#REVIEW
+app.include_router(review_requests_router, prefix="/api")
 
 
 @app.get("/health")
