@@ -140,3 +140,16 @@ def update_status(
     rr.status = payload.status
     db.commit()
     return {"message": "Status updated"}
+
+@router.get("/inbox/count")
+def inbox_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pending = (
+        db.query(ReviewRequest)
+        .filter(ReviewRequest.recipient_id == current_user.id)
+        .filter(ReviewRequest.status == "pending")
+        .count()
+    )
+    return {"pending": pending}

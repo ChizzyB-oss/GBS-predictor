@@ -1,6 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 import { useSidebar } from "../Context/SidebarContext";
+import { useEffect, useState } from "react";
+import { reviewApi } from "../api/client";
 
 import {
   LayoutDashboard,
@@ -37,6 +39,40 @@ export default function Sidebar() {
   ];
 
   const links = user?.role === "admin" ? adminLinks : clinicianLinks;
+
+  const [pendingReviews, setPendingReviews] = useState(0);
+
+useEffect(() => {
+  // only clinicians need it
+  if (!user || user.role === "admin") return;
+
+  let alive = true;
+
+  async function loadCount() {
+    try {
+      const token = localStorage.getItem("gbs_token");
+      if (!token) return;
+
+      const data = await reviewApi.inboxCount(token);
+      if (!alive) return;
+
+      setPendingReviews(Number(data?.pending || 0));
+    } catch (e) {
+      // fail silently (don’t break sidebar)
+      console.error("Failed to load inbox count:", e);
+    }
+  }
+
+  loadCount();
+
+  // optional: refresh every 20s for demo “live” feel
+  const t = setInterval(loadCount, 20000);
+
+  return () => {
+    alive = false;
+    clearInterval(t);
+  };
+}, [user]);
 
   return (
     <aside
@@ -107,6 +143,24 @@ export default function Sidebar() {
                     : "text-slate-500 dark:text-slate-400"
                 }`}
               />
+
+              {/* Badge (pending reviews) */}
+{name === "Review Inbox" && pendingReviews > 0 && (
+  <span
+    className={`
+      ml-auto
+      inline-flex items-center justify-center
+      min-w-5 h-5 px-1.5
+      text-[11px] font-bold
+      rounded-full
+      bg-red-600 text-white
+      ${collapsed ? "absolute right-2 top-2" : ""}
+    `}
+    title={`${pendingReviews} pending review request(s)`}
+  >
+    {pendingReviews > 99 ? "99+" : pendingReviews}
+  </span>
+)}
 
               {!collapsed && <span className="ml-1">{name}</span>}
             </Link>

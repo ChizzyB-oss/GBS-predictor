@@ -321,6 +321,9 @@ export const reviewApi = {
   inbox(token) {
     return apiRequest("/api/reviews/inbox", { method: "GET", token });
   },
+  inboxCount(token) {
+  return apiRequest("/api/reviews/inbox/count", { method: "GET", token });
+  },
   updateStatus(reviewId, status, token) {
     return apiRequest(`/api/reviews/${reviewId}/status`, {
       method: "PATCH",
