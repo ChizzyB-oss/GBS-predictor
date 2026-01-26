@@ -116,55 +116,56 @@ def get_single_prediction(
         "created_at": prediction.created_at,
     }
 
-@router.get("/prediction/shared/{prediction_id}")
+@router.get("/shared/{prediction_id}")
 def get_shared_prediction(
     prediction_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Allow if user is owner OR recipient of an approved/pending review request
-    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
-    if not prediction:
-        raise HTTPException(status_code=404, detail="Prediction not found")
+    pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not pred:
+        raise HTTPException(404, "Prediction not found")
 
-    if prediction.user_id != current_user.id:
+    # allow owner
+    if pred.user_id != current_user.id:
+        # allow recipient if review request exists
         link = (
             db.query(ReviewRequest)
             .filter(ReviewRequest.prediction_id == prediction_id)
             .filter(ReviewRequest.recipient_id == current_user.id)
             .first()
         )
-        if not link:
-            raise HTTPException(status_code=403, detail="Not allowed")
+        if not link and current_user.role != "admin":
+            raise HTTPException(403, "Not allowed")
 
-    # Return same shape as get_single_prediction
+    # parse JSON fields safely
     try:
-        input_data = json.loads(prediction.input_data) if prediction.input_data else {}
+        input_data = json.loads(pred.input_data) if pred.input_data else {}
     except:
         input_data = {}
 
     try:
-        probabilities = json.loads(prediction.probabilities) if prediction.probabilities else {}
+        probabilities = json.loads(pred.probabilities) if pred.probabilities else {}
     except:
         probabilities = {}
 
     try:
-        features_used = json.loads(prediction.features_used) if prediction.features_used else []
+        features_used = json.loads(pred.features_used) if pred.features_used else []
     except:
         features_used = []
 
     try:
-        shap_data = json.loads(prediction.shap) if prediction.shap else None
+        shap_data = json.loads(pred.shap) if pred.shap else None
     except:
         shap_data = None
 
     return {
-        "id": prediction.id,
+        "id": pred.id,
         "input_data": input_data,
-        "predicted_subtype": prediction.predicted_subtype,
-        "confidence": prediction.confidence,
+        "predicted_subtype": pred.predicted_subtype,
+        "confidence": pred.confidence,
         "probabilities": probabilities,
         "features_used": features_used,
         "shap": shap_data,
-        "created_at": prediction.created_at,
+        "created_at": pred.created_at,
     }

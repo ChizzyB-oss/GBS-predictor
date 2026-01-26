@@ -32,12 +32,17 @@ const [colleaguesLoading, setColleaguesLoading] = useState(false);
   // ------------------------------
   // Fetch prediction if opened from history
   // ------------------------------
-  useEffect(() => {
+const isShared = Boolean(location.state?.shared);
+
+useEffect(() => {
   if (!result && id) {
     setLoading(true);
 
-    predictionApi
-      .getPredictionById(id, token)
+    const fetcher = isShared
+      ? predictionApi.getSharedPredictionById(id, token)
+      : predictionApi.getPredictionById(id, token);
+
+    Promise.resolve(fetcher)
       .then((data) => setResult(data))
       .catch((err) => {
         console.error(err);
@@ -45,7 +50,7 @@ const [colleaguesLoading, setColleaguesLoading] = useState(false);
       })
       .finally(() => setLoading(false));
   }
-}, [id, result, token]);
+}, [id, result, token, isShared]);
 
   if (loading) {
     return (

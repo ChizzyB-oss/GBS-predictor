@@ -43,17 +43,16 @@ export default function ReviewInbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function markAs(reviewId, status) {
-    try {
-      const res = await reviewApi.updateStatus(reviewId, status, token);
-      if (!res.ok) throw new Error("Failed to update status");
-      // refresh list
-      await loadInbox();
-    } catch (e) {
-      console.error(e);
-      alert(e.message || "Could not update status");
-    }
+async function markAs(reviewId, status) {
+  try {
+    setError("");
+    await reviewApi.updateStatus(reviewId, status, token);
+    await loadInbox();
+  } catch (e) {
+    console.error(e);
+    setError(e.message || "Failed to update status");
   }
+}
 
   return (
     <DashboardLayout>
@@ -160,7 +159,9 @@ export default function ReviewInbox() {
                     onClick={async () => {
                       // Mark viewed, then open prediction details
                       if (r.status === "pending") await markAs(r.id, "viewed");
-                      navigate(`/prediction-result/${r.prediction_id}`);
+                      navigate(`/prediction-result/${r.prediction_id}`, {
+  state: { shared: true },
+});
                     }}
                     className="
                       inline-flex items-center justify-center gap-2

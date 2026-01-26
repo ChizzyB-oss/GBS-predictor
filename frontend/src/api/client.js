@@ -177,7 +177,7 @@ export const predictionApi = {
     return apiDownload(`/api/predictions/${predictionId}/report`, token);
   },
 
-  getSharedPredictionById(predictionId, token) {
+getSharedPredictionById(predictionId, token) {
   return apiRequest(`/api/prediction/shared/${predictionId}`, {
     method: "GET",
     token,
