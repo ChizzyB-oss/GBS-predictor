@@ -14,7 +14,8 @@ import {
   BarChart3,
   LogOut,
   Menu,
-  Inbox
+  Inbox,
+  Send
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -27,7 +28,8 @@ export default function Sidebar() {
     { name: "Make Prediction", to: "/clinician/predict", icon: Activity },
     { name: "Prediction History", to: "/clinician/history", icon: FileClock },
     { name: "Profile Settings", to: "/clinician/profile", icon: UserCog },
-    { name: "Review Inbox", to: "/clinician/reviews", icon: Inbox }
+    { name: "Review Inbox", to: "/clinician/reviews", icon: Inbox },
+    { name: "Sent Reviews", to: "/clinician/reviews/sent", icon: Send },
   ];
 
   const adminLinks = [
@@ -144,25 +146,24 @@ useEffect(() => {
                 }`}
               />
 
+              {!collapsed && <span className="ml-1">{name}</span>}
+
               {/* Badge (pending reviews) */}
 {name === "Review Inbox" && pendingReviews > 0 && (
   <span
     className={`
-      ml-auto
+      ${collapsed ? "absolute right-2 top-2" : "ml-auto"}
       inline-flex items-center justify-center
       min-w-5 h-5 px-1.5
       text-[11px] font-bold
       rounded-full
       bg-red-600 text-white
-      ${collapsed ? "absolute right-2 top-2" : ""}
     `}
     title={`${pendingReviews} pending review request(s)`}
   >
     {pendingReviews > 99 ? "99+" : pendingReviews}
   </span>
 )}
-
-              {!collapsed && <span className="ml-1">{name}</span>}
             </Link>
           );
         })}

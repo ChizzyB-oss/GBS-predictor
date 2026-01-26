@@ -153,3 +153,41 @@ def inbox_count(
         .count()
     )
     return {"pending": pending}
+
+# ---------------------------------------------------------
+# 3b) Outbox: review requests SENT BY you
+# ---------------------------------------------------------
+@router.get("/outbox")
+def outbox(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = (
+        db.query(ReviewRequest, User, Prediction)
+        .join(User, User.id == ReviewRequest.recipient_id)   # recipient clinician
+        .join(Prediction, Prediction.id == ReviewRequest.prediction_id)
+        .filter(ReviewRequest.sender_id == current_user.id)
+        .order_by(ReviewRequest.created_at.desc())
+        .all()
+    )
+
+    out = []
+    for rr, recipient, pred in rows:
+        out.append(
+            {
+                "id": rr.id,
+                "sender_id": rr.sender_id,
+                "recipient_id": rr.recipient_id,
+                "prediction_id": rr.prediction_id,
+                "note": rr.note,
+                "status": rr.status,
+                "created_at": rr.created_at,
+                # recipient info (for the sender to see who they sent to)
+                "recipient_name": recipient.full_name,
+                "recipient_email": recipient.email,
+                # prediction snapshot
+                "predicted_subtype": pred.predicted_subtype,
+                "confidence": pred.confidence,
+            }
+        )
+    return out

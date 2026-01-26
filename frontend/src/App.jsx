@@ -10,6 +10,8 @@ import ClinicianDashboard from "./Pages/Clinician/ClinicianDashboard";
 import PredictionForm from "./Pages/Clinician/PredictionForm";
 import PredictionHistory from "./Pages/Clinician/PredictionHistory";
 import ProfileSettings from "./Pages/Clinician/ProfileSettings";
+import ReviewOutbox from "./Pages/Clinician/ReviewOutbox";
+import ReviewInbox from "./Pages/Clinician/ReviewInbox";
 
 import AdminDashboard from "./Pages/Admin/AdminDashboard";
 import ManageUsers from "./Pages/Admin/ManageUsers";
@@ -19,7 +21,6 @@ import AdminMonitoring from "./Pages/Admin/AdminMonitoring";
 
 import ProtectedRoute from "./Components/ProtectedRoute";
 import PredictionResultPage from "./Components/PredictionResultModal";
-import ReviewInbox from "./Pages/Clinician/ReviewInbox";
 import { AuthProvider } from "./Context/AuthContext";
 
 function AppRoutes() {
@@ -112,6 +113,15 @@ function AppRoutes() {
         }
        />
 
+       <Route 
+        path="/clinician/reviews/sent" 
+        element={
+          <ProtectedRoute allowed={["clinician"]}>
+            <ReviewOutbox />
+          </ProtectedRoute>
+        }
+       />
+
       <Route
         path="/clinician/profile"
         element={
@@ -171,7 +181,11 @@ function AppRoutes() {
 
 <Route
   path="/prediction-result/:id"
-  element={<PredictionResultPage />}
+  element={
+    <ProtectedRoute allowed={["clinician", "admin"]}>
+      <PredictionResultPage />
+    </ProtectedRoute>
+  }
 />
 
       {/* FALLBACK */}
