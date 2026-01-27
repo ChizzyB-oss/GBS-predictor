@@ -90,7 +90,7 @@ export default function PredictionForm() {
       };
 
       const res = await fetch(
-        "http://127.0.0.1:8000/api/predictions/predict",
+        "http://127.0.0.1:8001/api/predictions/predict",
         {
           method: "POST",
           headers: {

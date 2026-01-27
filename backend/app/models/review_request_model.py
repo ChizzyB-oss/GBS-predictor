@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from datetime import datetime
-
 from ..core.database import Base
 
 class ReviewRequest(Base):
@@ -8,17 +7,17 @@ class ReviewRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Who sent / who receives
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    prediction_id = Column(Integer, ForeignKey("predictions.id"), nullable=False)
 
-    # Which prediction is being reviewed
-    prediction_id = Column(Integer, ForeignKey("predictions.id"), nullable=False, index=True)
-
-    # Optional note
     note = Column(Text, nullable=True)
+    status = Column(String(20), default="pending")  # pending/viewed/resolved
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Workflow status
-    status = Column(String(20), default="pending", nullable=False)  # pending | viewed | resolved
+    # ✅ NEW: reviewer feedback (recipient writes this)
+    feedback = Column(Text, nullable=True)
+    feedback_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # ✅ NEW: sender notification flag (sender hasn't seen feedback yet)
+    sender_seen = Column(Boolean, default=True)  # True means "no new feedback"

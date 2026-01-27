@@ -8,9 +8,15 @@ from ..services.auth_service import get_current_user
 from ..models.user_model import User
 from ..models.prediction_model import Prediction
 from ..models.review_request_model import ReviewRequest
-from ..schemas.review_schema import ReviewRequestCreate, ReviewRequestOut, ReviewStatusUpdate
+from ..schemas.review_schema import (
+    ReviewRequestCreate,
+    ReviewRequestOut,
+    ReviewStatusUpdate,
+    ReviewFeedbackUpdate,
+)
 
 router = APIRouter(prefix="/reviews", tags=["Peer Review"])
+
 
 # ---------------------------------------------------------
 # 1) List colleagues (clinicians) you can send to
@@ -20,7 +26,6 @@ def list_colleagues(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Return other clinicians only (adjust if you want admins too)
     qs = (
         db.query(User)
         .filter(User.role == "clinician")
@@ -40,6 +45,7 @@ def list_colleagues(
         for u in qs
     ]
 
+
 # ---------------------------------------------------------
 # 2) Create a review request
 # ---------------------------------------------------------
@@ -49,7 +55,6 @@ def create_review_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Ensure prediction exists and belongs to sender (owner) OR sender is admin
     pred = db.query(Prediction).filter(Prediction.id == payload.prediction_id).first()
     if not pred:
         raise HTTPException(404, "Prediction not found")
@@ -57,7 +62,6 @@ def create_review_request(
     if current_user.role != "admin" and pred.user_id != current_user.id:
         raise HTTPException(403, "Not allowed to share a prediction you do not own")
 
-    # Ensure recipient exists and is a clinician
     recipient = db.query(User).filter(User.id == payload.recipient_id).first()
     if not recipient or not recipient.is_active:
         raise HTTPException(404, "Recipient not found")
@@ -72,12 +76,14 @@ def create_review_request(
         note=payload.note,
         status="pending",
         created_at=datetime.utcnow(),
+        sender_seen=True,  # True means "no new feedback for sender"
     )
     db.add(rr)
     db.commit()
     db.refresh(rr)
 
     return {"message": "Review request sent", "id": rr.id}
+
 
 # ---------------------------------------------------------
 # 3) Inbox: review requests sent TO you
@@ -89,14 +95,14 @@ def inbox(
 ):
     rows = (
         db.query(ReviewRequest, User, Prediction)
-        .join(User, User.id == ReviewRequest.sender_id)
+        .join(User, User.id == ReviewRequest.sender_id)  # sender info
         .join(Prediction, Prediction.id == ReviewRequest.prediction_id)
         .filter(ReviewRequest.recipient_id == current_user.id)
         .order_by(ReviewRequest.created_at.desc())
         .all()
     )
 
-    out = []
+    out: List[ReviewRequestOut] = []
     for rr, sender, pred in rows:
         out.append(
             ReviewRequestOut(
@@ -111,12 +117,75 @@ def inbox(
                 sender_email=sender.email,
                 predicted_subtype=pred.predicted_subtype,
                 confidence=pred.confidence,
+                feedback=rr.feedback,
+                feedback_at=rr.feedback_at,
+                sender_seen=rr.sender_seen,
             )
         )
     return out
 
+
 # ---------------------------------------------------------
-# 4) Update status (viewed/resolved)
+# 3a) Inbox count (pending)
+# ---------------------------------------------------------
+@router.get("/inbox/count")
+def inbox_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pending = (
+        db.query(ReviewRequest)
+        .filter(ReviewRequest.recipient_id == current_user.id)
+        .filter(ReviewRequest.status == "pending")
+        .count()
+    )
+    return {"pending": pending}
+
+
+# ---------------------------------------------------------
+# 3b) Outbox: review requests SENT BY you
+# (Use this for the "Sent" tab in the same UI)
+# ---------------------------------------------------------
+@router.get("/outbox", response_model=List[ReviewRequestOut])
+def outbox(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = (
+        db.query(ReviewRequest, User, Prediction)
+        .join(User, User.id == ReviewRequest.recipient_id)  # recipient info
+        .join(Prediction, Prediction.id == ReviewRequest.prediction_id)
+        .filter(ReviewRequest.sender_id == current_user.id)
+        .order_by(ReviewRequest.created_at.desc())
+        .all()
+    )
+
+    out: List[ReviewRequestOut] = []
+    for rr, recipient, pred in rows:
+        out.append(
+            ReviewRequestOut(
+                id=rr.id,
+                sender_id=rr.sender_id,
+                recipient_id=rr.recipient_id,
+                prediction_id=rr.prediction_id,
+                note=rr.note,
+                status=rr.status,
+                created_at=rr.created_at,
+                # ✅ IMPORTANT: use recipient fields (don’t overload sender_name)
+                recipient_name=recipient.full_name,
+                recipient_email=recipient.email,
+                predicted_subtype=pred.predicted_subtype,
+                confidence=pred.confidence,
+                feedback=rr.feedback,
+                feedback_at=rr.feedback_at,
+                sender_seen=rr.sender_seen,
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------
+# 4) Update status (recipient marks pending->viewed/resolved)
 # ---------------------------------------------------------
 @router.patch("/{review_id}/status")
 def update_status(
@@ -133,7 +202,6 @@ def update_status(
     if not rr:
         raise HTTPException(404, "Review request not found")
 
-    # Only recipient (or admin) can update status
     if current_user.role != "admin" and rr.recipient_id != current_user.id:
         raise HTTPException(403, "Not allowed")
 
@@ -141,53 +209,53 @@ def update_status(
     db.commit()
     return {"message": "Status updated"}
 
-@router.get("/inbox/count")
-def inbox_count(
+
+# ---------------------------------------------------------
+# 5) Submit feedback (recipient writes feedback + resolves)
+# ---------------------------------------------------------
+@router.patch("/{review_id}/feedback")
+def submit_feedback(
+    review_id: int,
+    payload: ReviewFeedbackUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    pending = (
-        db.query(ReviewRequest)
-        .filter(ReviewRequest.recipient_id == current_user.id)
-        .filter(ReviewRequest.status == "pending")
-        .count()
-    )
-    return {"pending": pending}
+    rr = db.query(ReviewRequest).filter(ReviewRequest.id == review_id).first()
+    if not rr:
+        raise HTTPException(404, "Review request not found")
+
+    if current_user.role != "admin" and rr.recipient_id != current_user.id:
+        raise HTTPException(403, "Not allowed")
+
+    text = (payload.feedback or "").strip()
+    if not text:
+        raise HTTPException(400, "Feedback cannot be empty")
+
+    rr.feedback = text
+    rr.feedback_at = datetime.utcnow()
+    rr.status = "resolved"
+    rr.sender_seen = False  # ✅ sender has NEW feedback to view
+
+    db.commit()
+    return {"message": "Feedback submitted"}
+
 
 # ---------------------------------------------------------
-# 3b) Outbox: review requests SENT BY you
+# 6) Mark feedback as seen (sender acknowledges feedback)
 # ---------------------------------------------------------
-@router.get("/outbox")
-def outbox(
+@router.patch("/{review_id}/seen")
+def mark_seen(
+    review_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(ReviewRequest, User, Prediction)
-        .join(User, User.id == ReviewRequest.recipient_id)   # recipient clinician
-        .join(Prediction, Prediction.id == ReviewRequest.prediction_id)
-        .filter(ReviewRequest.sender_id == current_user.id)
-        .order_by(ReviewRequest.created_at.desc())
-        .all()
-    )
+    rr = db.query(ReviewRequest).filter(ReviewRequest.id == review_id).first()
+    if not rr:
+        raise HTTPException(404, "Review request not found")
 
-    out = []
-    for rr, recipient, pred in rows:
-        out.append(
-            {
-                "id": rr.id,
-                "sender_id": rr.sender_id,
-                "recipient_id": rr.recipient_id,
-                "prediction_id": rr.prediction_id,
-                "note": rr.note,
-                "status": rr.status,
-                "created_at": rr.created_at,
-                # recipient info (for the sender to see who they sent to)
-                "recipient_name": recipient.full_name,
-                "recipient_email": recipient.email,
-                # prediction snapshot
-                "predicted_subtype": pred.predicted_subtype,
-                "confidence": pred.confidence,
-            }
-        )
-    return out
+    if current_user.role != "admin" and rr.sender_id != current_user.id:
+        raise HTTPException(403, "Not allowed")
+
+    rr.sender_seen = True
+    db.commit()
+    return {"message": "Marked as seen"}

@@ -1,7 +1,7 @@
 // ==============================================
 // BASE URL (EXPORTED SO ALL COMPONENTS CAN USE IT)
 // ==============================================
-export const API_BASE_URL = "http://127.0.0.1:8000";
+export const API_BASE_URL = "http://127.0.0.1:8001";
 
 // ==============================================
 // GENERIC REQUEST HANDLER
@@ -318,19 +318,40 @@ export const reviewApi = {
   requestReview(payload, token) {
     return apiRequest("/api/reviews/request", { method: "POST", body: payload, token });
   },
+
   inbox(token) {
     return apiRequest("/api/reviews/inbox", { method: "GET", token });
   },
   inboxCount(token) {
-  return apiRequest("/api/reviews/inbox/count", { method: "GET", token });
+    return apiRequest("/api/reviews/inbox/count", { method: "GET", token });
   },
+
+  // ✅ for "Sent" tab in same page
   outbox(token) {
-  return apiRequest("/api/reviews/outbox", { method: "GET", token });
+    return apiRequest("/api/reviews/outbox", { method: "GET", token });
   },
+
   updateStatus(reviewId, status, token) {
     return apiRequest(`/api/reviews/${reviewId}/status`, {
       method: "PATCH",
       body: { status },
+      token,
+    });
+  },
+
+  // ✅ recipient submits feedback
+  submitFeedback(reviewId, feedback, token) {
+    return apiRequest(`/api/reviews/${reviewId}/feedback`, {
+      method: "PATCH",
+      body: { feedback },
+      token,
+    });
+  },
+
+  // ✅ sender marks feedback as seen
+  markSeen(reviewId, token) {
+    return apiRequest(`/api/reviews/${reviewId}/seen`, {
+      method: "PATCH",
       token,
     });
   },

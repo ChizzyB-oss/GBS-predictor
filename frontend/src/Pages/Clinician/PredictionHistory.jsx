@@ -85,7 +85,7 @@ const urgencyBarColor = (level) => {
     async function loadHistory() {
       try {
         const res = await fetch(
-          "http://127.0.0.1:8000/api/prediction/history",
+          "http://127.0.0.1:8001/api/prediction/history",
           {
             headers: { Authorization: `Bearer ${token}` },
           }

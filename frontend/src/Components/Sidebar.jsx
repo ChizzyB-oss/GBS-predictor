@@ -29,7 +29,6 @@ export default function Sidebar() {
     { name: "Prediction History", to: "/clinician/history", icon: FileClock },
     { name: "Profile Settings", to: "/clinician/profile", icon: UserCog },
     { name: "Review Inbox", to: "/clinician/reviews", icon: Inbox },
-    { name: "Sent Reviews", to: "/clinician/reviews/sent", icon: Send },
   ];
 
   const adminLinks = [
