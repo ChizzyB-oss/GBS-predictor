@@ -66,6 +66,8 @@ def predict_gbs_subtype(
             input_data=json.dumps(payload_data),
             predicted_subtype=predicted_subtype,
             confidence=confidence,
+            ci_lower=confidence_interval["lower"],
+            ci_upper=confidence_interval["upper"],
             probabilities=json.dumps(probabilities),
             features_used=json.dumps(features_used),
             shap=json.dumps(shap) if shap else None,

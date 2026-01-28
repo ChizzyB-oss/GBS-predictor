@@ -13,6 +13,8 @@ class Prediction(Base):
     input_data = Column(Text, nullable=False)  # JSON string
     predicted_subtype = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
+    ci_lower = Column(Float, nullable=True)
+    ci_upper = Column(Float, nullable=True)
     probabilities = Column(Text, nullable=False)  # JSON string
     features_used = Column(Text, nullable=True)
     shap = Column(Text, nullable=True)

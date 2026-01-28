@@ -57,7 +57,10 @@ def get_my_prediction_history(
             "id": r.id,
             "input_data": input_data,                
             "predicted_subtype": r.predicted_subtype,
-            "confidence": r.confidence,
+            "confidence_interval": (
+               {"lower": float(r.ci_lower), "upper": float(r.ci_upper)}
+               if getattr(r, "ci_lower", None) is not None and getattr(r, "ci_upper", None) is not None
+               else _confidence_interval(conf, margin=0.07)),
             "confidence_interval": _confidence_interval(conf, margin=0.07),
             "probabilities": probabilities,        
             "created_at": r.created_at,
@@ -109,7 +112,10 @@ def get_single_prediction(
         "input_data": input_data,
         "predicted_subtype": prediction.predicted_subtype,
         "confidence": prediction.confidence,
-        "confidence_interval": _confidence_interval(conf, margin=0.07),
+        "confidence_interval": (
+           {"lower": float(prediction.ci_lower), "upper": float(prediction.ci_upper)}
+           if getattr(prediction, "ci_lower", None) is not None and getattr(prediction, "ci_upper", None) is not None
+           else _confidence_interval(conf, margin=0.07)),
         "probabilities": probabilities,
         "features_used": features_used,
         "shap": shap_data,
@@ -159,11 +165,18 @@ def get_shared_prediction(
     except:
         shap_data = None
 
+    conf = float(pred.confidence or 0.0)
+    ci = None
+    if getattr(pred, "ci_lower", None) is not None and getattr(pred, "ci_upper", None) is not None:
+        ci = {"lower": float(pred.ci_lower), "upper": float(pred.ci_upper)}
+    else:
+        ci = _confidence_interval(conf, margin=0.07)
     return {
         "id": pred.id,
         "input_data": input_data,
         "predicted_subtype": pred.predicted_subtype,
         "confidence": pred.confidence,
+        "confidence_interval": ci,
         "probabilities": probabilities,
         "features_used": features_used,
         "shap": shap_data,
