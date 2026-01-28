@@ -28,6 +28,7 @@ const [reviewLoading, setReviewLoading] = useState(false);
 const [reviewError, setReviewError] = useState("");
 const [reviewSuccess, setReviewSuccess] = useState("");
 const [colleaguesLoading, setColleaguesLoading] = useState(false);
+const [predictionReviews, setPredictionReviews] = useState([]);
 
   // ------------------------------
   // Fetch prediction if opened from history
@@ -51,6 +52,23 @@ useEffect(() => {
       .finally(() => setLoading(false));
   }
 }, [id, result, token, isShared]);
+
+useEffect(() => {
+  if (!result?.id) return;
+
+  // Only the owner (sender) should see reviewer feedback banner
+  if (isShared) return;
+
+  (async () => {
+    try {
+      const data = await reviewApi.forPrediction(result.id, token);
+      setPredictionReviews(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Failed to load prediction reviews:", e);
+      setPredictionReviews([]);
+    }
+  })();
+}, [result?.id, token, isShared]);
 
   if (loading) {
     return (
@@ -109,6 +127,14 @@ function urgencyClasses(level) {
     return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800";
   return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800";
 }
+
+const latestReview =
+  predictionReviews.length > 0 ? predictionReviews[0] : null;
+
+const reviewerName =
+  latestReview?.reviewer_name ||
+  latestReview?.reviewer_email ||
+  "Clinician reviewer";
 
   // Probability colours (UNCHANGED)
   const subtypeColors = {
@@ -325,6 +351,55 @@ const urgency = urgencyLevel(lowerBoundPct);
   </p>
 )}
           </div>
+
+          {/* ================= Peer Review Feedback ================= */}
+{latestReview && (
+  <div
+    className="
+      mt-8
+      rounded-lg
+      border border-slate-200 dark:border-slate-800
+      bg-slate-50 dark:bg-slate-800
+      p-4
+    "
+  >
+    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+      Reviewed by {reviewerName}
+    </p>
+
+    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      Status: {latestReview.status}
+      {latestReview.feedback_at &&
+        ` • Feedback received ${new Date(
+          latestReview.feedback_at
+        ).toLocaleString("en-GB")}`}
+    </p>
+
+    {latestReview.sender_seen === false && (
+      <button
+        onClick={async () => {
+          try {
+            await reviewApi.markSeen(latestReview.id, token);
+            const data = await reviewApi.forPrediction(result.id, token);
+            setPredictionReviews(Array.isArray(data) ? data : []);
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+        className="
+          mt-3 inline-flex items-center
+          px-3 py-1.5
+          rounded-md
+          bg-blue-600 hover:bg-blue-700
+          text-white text-xs font-semibold
+          transition
+        "
+      >
+        Mark feedback as read
+      </button>
+    )}
+  </div>
+)}
 
           {/* ================= Clinical Guidance ================= */}
           <div className="mt-8">

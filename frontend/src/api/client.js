@@ -355,4 +355,18 @@ export const reviewApi = {
       token,
     });
   },
+
+  forPrediction(predictionId, token) {
+  return apiRequest(`/api/reviews/for-prediction/${predictionId}`, {
+    method: "GET",
+    token,
+  });
+},
+
+markSeen(reviewId, token) {
+  return apiRequest(`/api/reviews/${reviewId}/seen`, {
+    method: "PATCH",
+    token,
+  });
+},
 };

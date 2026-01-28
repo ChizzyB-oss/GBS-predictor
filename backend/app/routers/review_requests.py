@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+from sqlalchemy import or_
 
 from ..core.database import get_db
 from ..services.auth_service import get_current_user
@@ -259,3 +260,43 @@ def mark_seen(
     rr.sender_seen = True
     db.commit()
     return {"message": "Marked as seen"}
+
+@router.get("/for-prediction/{prediction_id}")
+def reviews_for_prediction(
+    prediction_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not pred:
+        raise HTTPException(404, "Prediction not found")
+
+    # Only owner/admin can view sender-side review tracking
+    if current_user.role != "admin" and pred.user_id != current_user.id:
+        raise HTTPException(403, "Not allowed")
+
+    rows = (
+        db.query(ReviewRequest, User)
+        .join(User, User.id == ReviewRequest.recipient_id)  # reviewer = recipient
+        .filter(ReviewRequest.prediction_id == prediction_id)
+        .filter(ReviewRequest.sender_id == current_user.id)  # sent by this user
+        .order_by(ReviewRequest.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": rr.id,
+            "prediction_id": rr.prediction_id,
+            "status": rr.status,
+            "note": rr.note,
+            "created_at": rr.created_at,
+            "feedback": rr.feedback,
+            "feedback_at": rr.feedback_at,
+            "sender_seen": rr.sender_seen,
+            "reviewer_id": reviewer.id,
+            "reviewer_name": reviewer.full_name,
+            "reviewer_email": reviewer.email,
+        }
+        for rr, reviewer in rows
+    ]
